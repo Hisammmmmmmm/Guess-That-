@@ -1,0 +1,338 @@
+import React, { useEffect, useState } from 'react';
+import confetti from 'canvas-confetti';
+import {
+  Trophy,
+  RotateCcw,
+  Sparkles,
+  Flame,
+  CheckCircle2,
+  XCircle,
+  Share2,
+  ArrowRight,
+  Clock,
+  Award,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { GameStats, QuizData } from '../types';
+import { soundEngine } from '../services/soundEngine';
+
+interface ResultsViewProps {
+  stats: GameStats;
+  quizData: QuizData;
+  onReplay: () => void;
+  onNewTheme: () => void;
+  onPlayClickSound?: () => void;
+  gameStyle?: 'competitive' | 'slideshow';
+}
+
+export const ResultsView: React.FC<ResultsViewProps> = ({
+  stats,
+  quizData,
+  onReplay,
+  onNewTheme,
+  onPlayClickSound,
+  gameStyle = 'competitive',
+}) => {
+  const [copied, setCopied] = useState(false);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
+  const total = stats.totalQuestions || 15;
+  const correct = stats.correctAnswers;
+  const accuracyPct = Math.round((correct / total) * 100);
+
+  // Determine Rank
+  let rank = 'B';
+  let rankTitle = 'Bien joué !';
+  let rankColor = 'from-amber-400 to-orange-500';
+  let rankBadgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+
+  if (accuracyPct >= 90) {
+    rank = 'S';
+    rankTitle = 'Légendaire ! Maître Absolu du Sujet';
+    rankColor = 'from-yellow-300 via-amber-400 to-pink-500';
+    rankBadgeBg = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50';
+  } else if (accuracyPct >= 75) {
+    rank = 'A';
+    rankTitle = 'Excellent ! Véritable Connaisseur';
+    rankColor = 'from-emerald-400 to-teal-500';
+    rankBadgeBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+  } else if (accuracyPct >= 50) {
+    rank = 'B';
+    rankTitle = 'Bravo ! Belle performance';
+    rankColor = 'from-blue-400 to-indigo-500';
+    rankBadgeBg = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+  } else {
+    rank = 'C';
+    rankTitle = 'Bel essai ! Réessaie pour battre ton record';
+    rankColor = 'from-purple-400 to-slate-400';
+    rankBadgeBg = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+  }
+
+  // Trigger celebration on load
+  useEffect(() => {
+    soundEngine.playFanfare();
+    confetti({
+      particleCount: 80,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
+  }, []);
+
+  const handleShare = () => {
+    onPlayClickSound?.();
+    const text = `🎯 J'ai obtenu le Rang ${rank} sur le Blind Test "${quizData.themeTitle}" avec un score de ${stats.score} pts (${correct}/${total} bonnes réponses) ! Peux-tu faire mieux ?`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const toggleExpand = (idx: number) => {
+    onPlayClickSound?.();
+    setExpandedIndex((prev) => (prev === idx ? null : idx));
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto flex flex-col gap-8 py-4 px-2 sm:px-4" id="results-view">
+      {/* Top Banner Card */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 bg-white/5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl text-center flex flex-col items-center gap-6 overflow-hidden"
+      >
+        {/* Glow Halo */}
+        <div
+          className="absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full opacity-25 filter blur-3xl"
+          style={{ backgroundColor: quizData.primaryColor || '#9333ea' }}
+        />
+
+        {gameStyle === 'slideshow' ? (
+          <>
+            <div>
+              <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
+                Fin du Diaporama
+              </span>
+              <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-4">
+                Merci pour votre attention !
+              </h2>
+              <p className="text-sm text-white/60 mt-3 max-w-md mx-auto">
+                La présentation sur le thème <span className="font-bold text-white/90">{quizData.themeTitle}</span> est maintenant terminée.
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Rank Circle Emblem */}
+            <div className="relative">
+              <div
+                className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-gradient-to-br ${rankColor} p-1 shadow-2xl flex items-center justify-center transform rotate-3 hover:rotate-0 transition-transform`}
+              >
+                <div className="w-full h-full bg-[#0F0A1F] rounded-[22px] flex flex-col items-center justify-center">
+                  <span className={`text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br ${rankColor} font-heading`}>
+                    {rank}
+                  </span>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/50 -mt-1">
+                    RANG
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
+                {rankTitle}
+              </span>
+              <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-3">
+                Score Final : <span className="text-yellow-400">{stats.score.toLocaleString()} pts</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-white/60 mt-1">
+                Blind Test : {quizData.themeTitle}
+              </p>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl mt-1">
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-1" />
+                <span className="text-xl font-black text-white">{correct} / {total}</span>
+                <span className="text-[11px] text-white/60 font-semibold">Bonnes réponses</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Award className="w-5 h-5 text-purple-400 mb-1" />
+                <span className="text-xl font-black text-white">{accuracyPct}%</span>
+                <span className="text-[11px] text-white/60 font-semibold">Précision globale</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Flame className="w-5 h-5 text-orange-400 mb-1" />
+                <span className="text-xl font-black text-white">{stats.maxStreak} max</span>
+                <span className="text-[11px] text-white/60 font-semibold">Meilleure série</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Clock className="w-5 h-5 text-pink-400 mb-1" />
+                <span className="text-xl font-black text-white">
+                  {Math.round(stats.totalTimeSpent / Math.max(1, stats.answers.length))}s
+                </span>
+                <span className="text-[11px] text-white/60 font-semibold">Temps moyen / Q</span>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-center gap-3 w-full max-w-md pt-2">
+          <button
+            onClick={() => {
+              onPlayClickSound?.();
+              onReplay();
+            }}
+            id="btn-replay-quiz"
+            className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(168,85,247,0.5)] cursor-pointer transform active:scale-95 hover:scale-[1.02]"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Rejouer</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onPlayClickSound?.();
+              onNewTheme();
+            }}
+            id="btn-new-theme"
+            className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-95 hover:scale-[1.02] backdrop-blur-md"
+          >
+            <Sparkles className="w-4 h-4 text-yellow-400" />
+            <span>Autre Thème</span>
+          </button>
+
+          {gameStyle !== 'slideshow' && (
+            <button
+              onClick={handleShare}
+              id="btn-share-score"
+              className="w-full sm:w-auto px-5 py-3 rounded-2xl font-bold text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
+            >
+              <Share2 className="w-4 h-4 text-purple-400" />
+              <span>{copied ? 'Score Copié dans le Presse-papier !' : 'Partager mon Résultat'}</span>
+            </button>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Review of all 15 Questions */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-2xl font-extrabold text-white font-heading">
+            Récapitulatif des 15 Énigmes & Anecdotes
+          </h3>
+          <span className="text-xs font-semibold text-white/50">Clique pour voir les détails</span>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          {quizData.questions.map((q, idx) => {
+            const playerAnswer = stats.answers.find((a) => a.questionIndex === idx);
+            const isCorrect = playerAnswer?.isCorrect ?? false;
+            const isExpanded = expandedIndex === idx;
+
+            return (
+              <div
+                key={q.id || idx}
+                className={`rounded-2xl border transition-all duration-200 overflow-hidden backdrop-blur-md ${
+                  isCorrect
+                    ? 'border-emerald-500/40 bg-emerald-950/30'
+                    : 'border-red-500/40 bg-red-950/30'
+                }`}
+              >
+                <button
+                  onClick={() => toggleExpand(idx)}
+                  className="w-full p-4 flex items-center justify-between text-left gap-3 cursor-pointer hover:bg-white/5"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-black border ${
+                        isCorrect
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-red-500/20 text-red-300 border-red-500/40'
+                      }`}
+                    >
+                      {idx + 1}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white truncate">
+                        {q.question}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs">
+                        <span className="text-white/50">Réponse :</span>
+                        <span className="font-bold text-emerald-400">{q.correctAnswer}</span>
+                        {!isCorrect && playerAnswer?.selectedOption && (
+                          <span className="text-red-400 line-through text-[11px] truncate">
+                            (Ton choix: {playerAnswer.selectedOption})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isCorrect ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                    )}
+                    {isExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-white/50" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-white/50" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Expanded Details */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-4 bg-black/40 border-t border-white/10 flex flex-col sm:flex-row gap-4 items-start"
+                    >
+                      {/* Image Preview */}
+                      <img
+                        src={q.imageUrl}
+                        alt={q.imagePrompt}
+                        referrerPolicy="no-referrer"
+                        className="w-full sm:w-36 h-24 object-cover rounded-xl border border-white/15 shrink-0"
+                      />
+
+                      <div className="flex flex-col gap-2">
+                        <div>
+                          <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">
+                            Indice de l'énigme
+                          </span>
+                          <p className="text-xs text-white/80 mt-0.5">{q.clue}</p>
+                        </div>
+
+                        <div>
+                          <span className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
+                            Le saviez-vous ?
+                          </span>
+                          <p className="text-xs text-white/80 mt-0.5 leading-relaxed">
+                            {q.trivia}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
