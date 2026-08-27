@@ -1,7 +1,10 @@
 import React from 'react';
 import { Flame, Trophy, Zap, Target } from 'lucide-react';
 
+import { t } from '../i18n/translations';
+
 interface ScoreBoardProps {
+  language?: string;
   currentIndex: number;
   totalQuestions: number;
   score: number;
@@ -13,6 +16,7 @@ interface ScoreBoardProps {
 }
 
 export const ScoreBoard: React.FC<ScoreBoardProps> = ({
+  language = 'fr',
   currentIndex,
   totalQuestions,
   score,
@@ -42,7 +46,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
       <div className="bg-white/5 border border-white/10 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg animate-pulse">
         <Flame className={`w-4 h-4 fill-current ${fireColor}`} />
         <div className="flex flex-col">
-          <span className="text-[9px] uppercase tracking-widest text-orange-400 font-bold">Série</span>
+          <span className="text-[9px] uppercase tracking-widest text-orange-400 font-bold">{t('streak_label', language)}</span>
           <span className="text-xs font-black text-white">{streak} ({multiplier})</span>
         </div>
       </div>

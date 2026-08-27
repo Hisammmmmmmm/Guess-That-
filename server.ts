@@ -39,6 +39,7 @@ interface ServerRoom {
   difficulty: string;
   gameMode: string;
   gameStyle: string;
+  language: string;
   durationPerQuestion: number;
   currentQuestionIndex: number;
   questionStartTime: number;
@@ -84,6 +85,7 @@ function serializeRoom(room: ServerRoom) {
     difficulty: room.difficulty,
     gameMode: room.gameMode,
     gameStyle: room.gameStyle,
+    language: room.language,
     durationPerQuestion: room.durationPerQuestion,
     currentQuestionIndex: room.currentQuestionIndex,
     questionStartTime: room.questionStartTime,
@@ -363,12 +365,13 @@ async function startServer() {
   app.get('/api/tts', async (req, res) => {
     try {
       const text = req.query.text as string;
+      const lang = (req.query.lang as string) || 'fr';
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
       const googleTTS = await import('google-tts-api');
       const base64Audio = await googleTTS.getAudioBase64(text.slice(0, 200), {
-        lang: 'fr',
+        lang: lang,
         slow: false,
         host: 'https://translate.google.com',
       });
@@ -383,6 +386,21 @@ async function startServer() {
   app.post('/api/generate-quiz', async (req, res) => {
     try {
       const { topic, difficulty = 'medium', language = 'fr', gameMode = 'quiz' } = req.body;
+
+      const codeToName: Record<string, string> = {
+        'fr': 'Français',
+        'en': 'English',
+        'es': 'Español',
+        'de': 'Deutsch',
+        'it': 'Italiano',
+        'pt': 'Português',
+        'nl': 'Nederlands',
+        'ru': 'Русский',
+        'ja': '日本語',
+        'zh': '中文',
+        'ar': 'العربية'
+      };
+      const langName = codeToName[language] || language;
 
       if (!topic || typeof topic !== 'string' || topic.trim().length === 0) {
         return res.status(400).json({ error: 'Le sujet (topic) est requis.' });
@@ -457,7 +475,8 @@ RÈGLES IMPORTANTES :
    - "accentColor" : Une couleur hex secondaire contrastée.
    - "ambientSound" : L'un de ces choix sonores obligatoirement : "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
 
-Langue du contenu : ${language === 'fr' ? 'Français' : 'English'}.
+Langue Cible Obligatoire : ${langName} (${language}).
+Tu DOIS IMPÉRATIVEMENT générer TOUT le texte (questions, options, réponses, indices, anecdotes, titre) EXCLUSIVEMENT dans cette langue : "${langName}".
 Niveau de difficulté : ${difficultyInstructions}`;
 
       const config = {
@@ -685,25 +704,26 @@ Niveau de difficulté : ${difficultyInstructions}`;
 
   // Room API check endpoint
   app.get('/api/room/:code', (req, res) => {
-    const code = (req.params.code || '').toUpperCase().trim();
-    const room = activeRooms.get(code);
-    if (!room) {
-      return res.status(404).json({ exists: false, error: 'Salon introuvable' });
-    }
-    return res.json({
-      exists: true,
-      room: {
-        code: room.code,
-        topic: room.topic,
-        themeTitle: room.themeTitle,
-        status: room.status,
-        difficulty: room.difficulty,
-        gameMode: room.gameMode,
-        playerCount: room.players.size,
-        hostId: room.hostId,
-      }
-    });
-  });
+        const code = (req.params.code || '').toUpperCase().trim();
+        const room = activeRooms.get(code);
+        if (!room) {
+          return res.status(404).json({ exists: false, error: 'Salon introuvable' });
+        }
+        return res.json({
+          exists: true,
+          room: {
+            code: room.code,
+            topic: room.topic,
+            themeTitle: room.themeTitle,
+            status: room.status,
+            difficulty: room.difficulty,
+            gameMode: room.gameMode,
+            language: room.language,
+            playerCount: room.players.size,
+            hostId: room.hostId,
+          }
+        });
+      });
 
   // WebSocket Multiplayer Server Logic
   wss.on('connection', (ws) => {
@@ -796,7 +816,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
 
         // CREATE ROOM
         if (type === 'create_room') {
-          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
+          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', language = 'fr', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -828,6 +848,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
             difficulty,
             gameMode,
             gameStyle,
+            language,
             durationPerQuestion: durationPerQuestion || 20,
             currentQuestionIndex: 0,
             questionStartTime: 0,

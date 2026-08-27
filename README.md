@@ -117,15 +117,15 @@ docker run -d \
   guess-that
 ```
 
-### Option B : Déploiement sur un VPS (Ubuntu / Debian avec PM2)
+### Option B : Déploiement sur un VPS (Ubuntu / Debian avec PM2 & Nginx)
 
-1. **Installer Node.js & PM2 :**
+1. **Installer Node.js, PM2 et Nginx :**
 ```bash
-sudo apt update && sudo apt install -y nodejs npm
+sudo apt update && sudo apt install -y nodejs npm nginx
 sudo npm install -g pm2
 ```
 
-2. **Cloner et préparer le projet :**
+2. **Cloner et compiler le projet :**
 ```bash
 git clone https://github.com/votre-nom-utilisateur/guess-that.git
 cd guess-that
@@ -133,16 +133,49 @@ npm install
 npm run build
 ```
 
-3. **Créer le fichier `.env` avec votre clé API :**
+3. **Créer le fichier `.env` avec votre clé API Gemini :**
 ```bash
 echo 'GEMINI_API_KEY="votre_cle_api_gemini"' > .env
+echo 'PORT=3000' >> .env
+echo 'NODE_ENV=production' >> .env
 ```
 
-4. **Démarrer le serveur avec PM2 :**
+4. **Démarrer le backend avec PM2 :**
 ```bash
 pm2 start dist/server.js --name "guess-that"
 pm2 save
 pm2 startup
+```
+*(Vérifiez que le serveur répond avec : `curl http://localhost:3000/api/health`)*
+
+5. **Configurer Nginx en Reverse Proxy (IMPORTANT) :**
+*Ne servez PAS les fichiers comme un simple site statique (sinon Nginx renvoie l'erreur 405 Not Allowed sur les requêtes POST vers l'IA et bloque les WebSockets).*
+
+Consultez le fichier exemple fourni `nginx.conf.example` ou éditez votre configuration Nginx (`/etc/nginx/sites-available/default` ou votre vhost) :
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+
+    # Essentiel pour les WebSockets (multijoueur)
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    # En-têtes d'origine
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Timeout pour la génération IA
+    proxy_connect_timeout 90s;
+    proxy_send_timeout 90s;
+    proxy_read_timeout 90s;
+}
+```
+Puis appliquez la configuration :
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### Option C : Hébergeurs Cloud (Render, Railway, Fly.io, etc.)

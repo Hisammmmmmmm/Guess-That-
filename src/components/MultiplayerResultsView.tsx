@@ -18,7 +18,10 @@ import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { multiplayerService } from '../services/multiplayerService';
 
+import { t } from '../i18n/translations';
+
 interface MultiplayerResultsViewProps {
+  language?: string;
   roomState: RoomState;
   currentPlayerId: string;
   onReplayRoom?: () => void;
@@ -31,6 +34,7 @@ interface MultiplayerResultsViewProps {
 }
 
 export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
+  language = 'fr',
   roomState,
   currentPlayerId,
   onReplayRoom,
@@ -86,9 +90,18 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
           gameMode: roomState.gameMode || 'quiz',
         }),
       });
-      const data = await response.json();
+      const rawText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        if (response.status === 405) {
+          throw new Error('Erreur 405 (Nginx Not Allowed) : Le serveur Nginx bloque les requêtes POST vers /api.');
+        }
+        throw new Error('Le serveur IA a renvoyé un format inattendu.');
+      }
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la génération du quiz');
+        throw new Error(data?.error || `Erreur serveur (${response.status}) lors de la génération du quiz`);
       }
       const preparedData = {
         ...data,

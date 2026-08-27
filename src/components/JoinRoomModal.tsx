@@ -11,7 +11,10 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { soundEngine } from '../services/soundEngine';
 
+import { t } from '../i18n/translations';
+
 interface JoinRoomModalProps {
+  language?: string;
   isOpen: boolean;
   onClose: () => void;
   onJoinRoom: (code: string, playerName: string, avatar: string) => void;
@@ -23,6 +26,7 @@ interface JoinRoomModalProps {
 const AVATARS = ['🦊', '🦁', '🤖', '🚀', '⚡', '👑', '🎮', '🍕', '🎯', '🔥', '🐱', '🌟'];
 
 export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
+  language = 'fr',
   isOpen,
   onClose,
   onJoinRoom,
@@ -91,9 +95,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                 <Users className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <h3 className="text-xl font-extrabold text-white font-heading">
-                  Rejoindre un Salon
-                </h3>
+                <h3 className="text-xl font-extrabold text-white font-heading">{t('join_room', language)}</h3>
                 <p className="text-xs text-white/60">
                   Affronte tes amis en direct sur le Blind Test !
                 </p>
@@ -153,9 +155,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
 
             {/* Avatar Picker */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-white/80 uppercase tracking-wider">
-                Choisis ton Avatar
-              </label>
+              <label className="text-xs font-bold text-white/80 uppercase tracking-wider">{t('choose_avatar', language)}</label>
               <div className="grid grid-cols-6 gap-2 p-2 rounded-2xl bg-white/5 border border-white/10">
                 {AVATARS.map((av) => (
                   <button
@@ -187,7 +187,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                 <span>Connexion au salon...</span>
               ) : (
                 <>
-                  <span>Rejoindre la partie</span>
+                  <span>{t('join_game', language)}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

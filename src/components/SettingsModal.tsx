@@ -1,4 +1,5 @@
 import React from 'react';
+import { t } from '../i18n/translations';
 import {
   X,
   Volume2,
@@ -34,10 +35,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const difficulties: { id: GameDifficulty; label: string; desc: string; time: number }[] = [
-    { id: 'easy', label: 'Facile', desc: 'Indices clairs & temps généreux (25s)', time: 25 },
-    { id: 'medium', label: 'Moyen', desc: 'Équilibré & immersif (15s)', time: 15 },
-    { id: 'hard', label: 'Difficile', desc: 'Chrono rapide (10s) & défi soutenu', time: 10 },
-    { id: 'expert', label: 'Expert', desc: 'Chrono éclair (8s) pour les vrais pros', time: 8 },
+    { id: 'easy', label: t('easy', settings.language), desc: 'Indices clairs & temps généreux (25s)', time: 25 },
+    { id: 'medium', label: t('medium', settings.language), desc: 'Équilibré & immersif (15s)', time: 15 },
+    { id: 'hard', label: t('hard', settings.language), desc: 'Chrono rapide (10s) & défi soutenu', time: 10 },
+    { id: 'expert', label: t('expert', settings.language), desc: 'Chrono éclair (8s) pour les vrais pros', time: 8 },
   ];
 
   const handleDifficultyChange = (diff: GameDifficulty, time: number) => {
@@ -170,7 +171,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm font-bold text-white">
               <Gauge className="w-4 h-4 text-yellow-400" />
-              <span>Niveau de Difficulté</span>
+              <span>{t('difficulty_level', settings.language)}</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -236,7 +237,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Master Volume */}
             <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/5 border border-white/10">
               <div className="flex items-center justify-between text-xs text-white/80 font-semibold">
-                <span>Volume Principal</span>
+                <span>{t('master_volume', settings.language)}</span>
                 <span className="font-mono-tech text-purple-300 font-bold">{Math.round(settings.masterVolume * 100)}%</span>
               </div>
               <input

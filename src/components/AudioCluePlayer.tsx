@@ -11,6 +11,7 @@ interface AudioCluePlayerProps {
   autoPlayOnNewQuestion?: boolean;
   youtubeVideoId?: string;
   gameMode?: string;
+  language?: string;
 }
 
 export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
@@ -21,6 +22,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
   autoPlayOnNewQuestion = true,
   youtubeVideoId,
   gameMode,
+  language = 'fr',
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeBar, setActiveBar] = useState(0);
@@ -48,7 +50,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
 
       // Voice synthesis of clue via Google TTS
       if (speechEnabled && clueText) {
-        fetch(`/api/tts?text=${encodeURIComponent(clueText)}`)
+        fetch(`/api/tts?text=${encodeURIComponent(clueText)}&lang=${language}`)
           .then((res) => (res.ok ? res.json().catch(() => null) : null))
           .then((data) => {
             if (data?.url) {

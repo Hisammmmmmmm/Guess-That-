@@ -26,7 +26,10 @@ import { QuizTheme, GameMode, GameDifficulty, GameStyle } from '../types';
 import { PRESET_THEMES } from '../data/presetThemes';
 import { soundEngine } from '../services/soundEngine';
 
+import { t } from '../i18n/translations';
+
 interface ThemeSelectorProps {
+  language: string;
   onSelectPreset: (theme: QuizTheme, difficulty: GameDifficulty, gameMode: GameMode, gameStyle: GameStyle) => void;
   onGenerateCustom: (customTopic: string, difficulty: GameDifficulty, gameMode: GameMode, gameStyle: GameStyle) => void;
   selectedMode: GameMode;
@@ -62,6 +65,7 @@ const SUGGESTIONS = [
 ];
 
 export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
+  language,
   onSelectPreset,
   onGenerateCustom,
   selectedMode,
@@ -95,26 +99,26 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   const gameModesList: { id: GameMode; title: string; subtitle: string; icon: React.ReactNode; badge: string; color: string }[] = [
     {
       id: 'quiz',
-      title: 'Mode Quiz',
-      subtitle: 'Questions, indices & culture générale',
+      title: t('mode_quiz_title', language),
+      subtitle: t('mode_quiz_desc', language),
       icon: <HelpCircle className="w-6 h-6" />,
       badge: 'Complet & Équilibré',
       color: 'from-blue-600 to-indigo-600',
     },
     {
       id: 'music_blind_test',
-      title: 'Blind Test Musical',
-      subtitle: 'Reconnais la musique, les OST & thèmes',
+      title: t('mode_music_title', language),
+      subtitle: t('mode_music_desc', language),
       icon: <Headphones className="w-6 h-6" />,
-      badge: '100% Audio & Jingle',
+      badge: '100% Audio',
       color: 'from-fuchsia-600 to-pink-600',
     },
     {
       id: 'visual_blind_test',
-      title: 'Blind Test Visuel',
-      subtitle: 'Reconnais le personnage ou l\'image (sans indice textuel)',
+      title: t('mode_visual_title', language),
+      subtitle: t('mode_visual_desc', language),
       icon: <Eye className="w-6 h-6" />,
-      badge: '100% Reconnaissance Visuelle',
+      badge: '100% Visuel',
       color: 'from-amber-500 to-orange-600',
     },
   ];
@@ -202,8 +206,8 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 className="flex flex-col gap-4"
               >
                 <div className="text-center mb-1">
-                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">Étape 1 : Choisis ton mode de jeu</h2>
-                  <p className="text-sm text-white/60 mt-1">Sélectionne l'une des 3 expériences immersives</p>
+                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">{t('step1_title', language)}</h2>
+                  <p className="text-sm text-white/60 mt-1">{t('step1_desc', language)}</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -257,12 +261,12 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                     </div>
                     <div className="flex flex-col text-left">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-bold text-white">Tu as déjà un code de salon ?</span>
+                        <span className="text-xs sm:text-sm font-bold text-white">{t('already_have_code', language)}</span>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black uppercase">
                           Multijoueur
                         </span>
                       </div>
-                      <span className="text-[11px] text-purple-200/70">Rejoins la partie d'un ami en direct</span>
+                      <span className="text-[11px] text-purple-200/70">{t('join_friend_live', language)}</span>
                     </div>
                   </div>
 
@@ -276,7 +280,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                     className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40 cursor-pointer transition-all transform hover:scale-105 active:scale-95 shrink-0"
                   >
                     <Users className="w-4 h-4" />
-                    <span>Rejoindre un salon</span>
+                    <span>{t('join_room', language)}</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -294,7 +298,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 className="flex flex-col gap-4 items-center"
               >
                 <div className="text-center mb-2">
-                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">Étape 2 : Style de jeu</h2>
+                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">{t('step2_title', language)}</h2>
                   <p className="text-sm text-white/60 mt-1">Comment préfères-tu jouer ?</p>
                 </div>
                 
@@ -302,22 +306,22 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                   {[
                     {
                       id: 'competitive_solo',
-                      label: 'Compétitif solo',
-                      desc: 'Gagne des points et bats ton record personnel en solo !',
+                      label: t('comp_solo', language),
+                      desc: t('comp_solo_desc', language),
                       badge: 'Solo',
                       icon: <Gamepad2 className="w-6 h-6 mb-1 text-purple-400" />
                     },
                     {
                       id: 'competitive_room',
-                      label: 'Compétitif salon',
-                      desc: 'Crée un salon en ligne avec code & QR Code pour affronter tes amis !',
+                      label: t('comp_room', language),
+                      desc: t('comp_room_desc', language),
                       badge: 'Multijoueur',
                       icon: <Users className="w-6 h-6 mb-1 text-pink-400" />
                     },
                     {
                       id: 'slideshow',
-                      label: 'Diapositif',
-                      desc: 'Regarde et devine tranquillement dans ta tête',
+                      label: t('slideshow', language),
+                      desc: t('slideshow_desc', language),
                       badge: 'Détente',
                       icon: <Tv className="w-6 h-6 mb-1 text-blue-400" />
                     },
@@ -381,16 +385,16 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 className="flex flex-col gap-4 items-center"
               >
                 <div className="text-center mb-2">
-                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">Étape 3 : Niveau de difficulté</h2>
-                  <p className="text-sm text-white/60 mt-1">Choisis le niveau de défi qui te correspond</p>
+                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">{t('difficulty_level', language)}</h2>
+                  <p className="text-sm text-white/60 mt-1">{t('step3_desc_alt', language)}</p>
                 </div>
                 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-3xl">
                   {[
-                    { id: 'easy', label: 'Facile', desc: 'Idéal pour s\'échauffer' },
-                    { id: 'medium', label: 'Moyen', desc: 'Un défi équilibré' },
-                    { id: 'hard', label: 'Difficile', desc: 'Pour les experts' },
-                    { id: 'expert', label: 'Expert', desc: 'Chrono éclair !' }
+                    { id: 'easy', label: t('easy', language), desc: t('diff_desc_easy', language) },
+                    { id: 'medium', label: t('medium', language), desc: t('diff_desc_medium', language) },
+                    { id: 'hard', label: t('hard', language), desc: t('diff_desc_hard', language) },
+                    { id: 'expert', label: t('expert', language), desc: t('diff_desc_expert', language) }
                   ].map((lvl) => {
                     const isSelected = difficulty === lvl.id;
                     return (
@@ -428,8 +432,8 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 className="flex flex-col gap-4"
               >
                 <div className="text-center mb-1">
-                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">Étape 4 : Sujet</h2>
-                  <p className="text-sm text-white/60 mt-1">Tape ton propre sujet ou choisis parmi nos suggestions</p>
+                  <h2 className="text-xl sm:text-2xl font-black text-white font-heading">{t('step3_title', language)}</h2>
+                  <p className="text-sm text-white/60 mt-1">{t('step4_desc', language)}</p>
                 </div>
 
                 {/* Custom Theme Generator Box */}
@@ -454,7 +458,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                       className="px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-200 shadow-[0_0_20px_rgba(168,85,247,0.4)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Générer</span>
+                      <span>{t('generate_action', language)}</span>
                     </button>
                   </form>
 
@@ -463,8 +467,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                 {/* Preset Categories Grid */}
                 <div className="mt-2">
                   <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
-                    <Flame className="w-3.5 h-3.5 text-yellow-400" /> Ou choisis un thème culte
-                  </h3>
+                    <Flame className="w-3.5 h-3.5 text-yellow-400" />{t('or_choose_preset', language)}</h3>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5">
                     {PRESET_THEMES.map((theme) => {
                       return (

@@ -150,6 +150,7 @@ class MultiplayerService {
     quizData: any;
     difficulty: string;
     gameMode: string;
+    language: string;
     durationPerQuestion: number;
   }) {
     await this.connect();

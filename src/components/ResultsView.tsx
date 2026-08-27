@@ -19,7 +19,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GameStats, QuizData } from '../types';
 import { soundEngine } from '../services/soundEngine';
 
+import { t } from '../i18n/translations';
+
 interface ResultsViewProps {
+  language?: string;
   stats: GameStats;
   quizData: QuizData;
   onReplay: () => void;
@@ -29,6 +32,7 @@ interface ResultsViewProps {
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({
+  language = 'fr',
   stats,
   quizData,
   onReplay,
@@ -45,7 +49,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
   // Determine Rank
   let rank = 'B';
-  let rankTitle = 'Bien joué !';
+  let rankTitle = t('well_played', language);
   let rankColor = 'from-amber-400 to-orange-500';
   let rankBadgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
 
@@ -266,7 +270,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                         {q.question}
                       </p>
                       <div className="flex items-center gap-2 mt-0.5 text-xs">
-                        <span className="text-white/50">Réponse :</span>
+                        <span className="text-white/50">{t('answer', language)}</span>
                         <span className="font-bold text-emerald-400">{q.correctAnswer}</span>
                         {!isCorrect && playerAnswer?.selectedOption && (
                           <span className="text-red-400 line-through text-[11px] truncate">

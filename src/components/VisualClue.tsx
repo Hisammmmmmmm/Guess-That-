@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { Maximize2, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { t } from '../i18n/translations';
+
 interface VisualClueProps {
+  language?: string;
   imageUrl: string;
   secondaryImageUrl?: string;
   secondaryImageSource?: string;
@@ -22,6 +25,7 @@ interface VisualClueProps {
 }
 
 export const VisualClue: React.FC<VisualClueProps> = ({
+  language = 'fr',
   imageUrl,
   secondaryImageUrl,
   secondaryImageSource = 'Wikipedia',
@@ -96,7 +100,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
         {!img1Loaded && !img2Loaded && !img1Error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-purple-300/70 gap-2 z-10 bg-neutral-950">
             <ImageIcon className="w-7 h-7 animate-pulse text-purple-400" />
-            <span className="text-[11px] sm:text-xs font-medium">Chargement des visuels de l'énigme...</span>
+            <span className="text-[11px] sm:text-xs font-medium">{t('loading_visuals', language)}</span>
           </div>
         )}
 
@@ -149,7 +153,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
           <div className="absolute bottom-0 inset-x-0 p-2 sm:p-3 bg-gradient-to-t from-[#0F0A1F] via-[#0F0A1F]/85 to-transparent flex items-center gap-2 z-10">
             <Sparkles className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
             <p className="text-[11px] sm:text-xs font-medium text-slate-200 line-clamp-2">
-              <span className="text-yellow-400 font-bold uppercase tracking-wider text-[10px] mr-1">Indice :</span> {clue}
+              <span className="text-yellow-400 font-bold uppercase tracking-wider text-[10px] mr-1">{t('clue', language)} :</span> {clue}
             </p>
           </div>
         )}

@@ -13,12 +13,15 @@ import {
   Radio,
   Edit2,
   X,
+  Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
+import { t, languages } from '../i18n/translations';
 
 interface MultiplayerLobbyProps {
+  language?: string;
   roomState: RoomState;
   currentPlayerId: string;
   isQuizGenerating?: boolean;
@@ -36,6 +39,7 @@ const QUICK_EMOJIS = ['🔥', '🎉', '👏', '😂', '🚀', '👑'];
 const AVATAR_CHOICES = ['👑', '🦊', '🦁', '🤖', '🚀', '⚡', '🎮', '🍕', '🎯', '🔥', '🐱', '🌟', '🦄', '🎧', '🏆', '💎'];
 
 export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
+  language = 'fr',
   roomState,
   currentPlayerId,
   isQuizGenerating = false,
@@ -147,7 +151,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/15 text-xs font-bold transition-all cursor-pointer backdrop-blur-md"
         >
           <ArrowLeft className="w-3.5 h-3.5 text-purple-400" />
-          <span>Quitter</span>
+          <span>{t('quit_room', language)}</span>
         </button>
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
@@ -258,7 +262,11 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             <h2 className="text-lg sm:text-xl font-black text-white font-heading truncate">
               {roomState.themeTitle || roomState.topic}
             </h2>
-            <div className="flex items-center gap-3 text-[11px] text-white/70">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/70">
+              <span className="flex items-center gap-1" title="Langue du salon">
+                <Globe className="w-3 h-3 opacity-70" />
+                {languages.find(l => l.code === roomState.language)?.flag || '🇫🇷'} {languages.find(l => l.code === roomState.language)?.name || 'Français'}
+              </span>
               <span>⏱️ {roomState.durationPerQuestion || 20}s / question</span>
               <span>🎯 {questionsCount > 0 ? `${questionsCount} questions prêtes` : 'Chargement questions...'}</span>
             </div>

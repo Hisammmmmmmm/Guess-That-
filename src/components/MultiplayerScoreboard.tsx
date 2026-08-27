@@ -5,7 +5,10 @@ import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { multiplayerService } from '../services/multiplayerService';
 
+import { t } from '../i18n/translations';
+
 interface MultiplayerScoreboardProps {
+  language?: string;
   roomState: RoomState;
   currentPlayerId: string;
   onSendReaction?: (emoji: string) => void;
@@ -15,6 +18,7 @@ interface MultiplayerScoreboardProps {
 const QUICK_REACTIONS = ['🔥', '🎉', '👏', '😂', '😱', '👑'];
 
 export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
+  language = 'fr',
   roomState,
   currentPlayerId,
   onSendReaction,
@@ -36,12 +40,9 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
             <Trophy className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs sm:text-sm font-extrabold text-white font-heading">
-              Classement Direct
-            </h3>
+            <h3 className="text-xs sm:text-sm font-extrabold text-white font-heading">{t('live_ranking', language)}</h3>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] text-white/50">
-                Salon : <span className="font-bold text-purple-300">{roomState.code}</span> ({playersList.length} j.)
+              <span className="text-[10px] text-white/50">{t('room', language)} : <span className="font-bold text-purple-300">{roomState.code}</span> ({playersList.length} j.)
               </span>
               <button
                 type="button"
@@ -51,7 +52,7 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
                   multiplayerService.refreshRoom(roomState.code);
                 }}
                 className="p-1 rounded-md bg-white/10 hover:bg-purple-500/30 border border-white/15 text-purple-300 hover:text-white transition-all cursor-pointer flex items-center justify-center"
-                title="Rafraîchir / Resynchroniser le salon"
+                title={t('refresh_room', language)}
               >
                 <RefreshCw className="w-3 h-3" />
               </button>
@@ -99,10 +100,10 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
                       <span className={`text-xs font-bold truncate ${isMe ? 'text-purple-200' : 'text-white'}`}>
-                        {player.isHost && player.name && player.name !== 'Hôte' ? `${player.name} (Hôte)` : player.name}
+                        {player.isHost && player.name && player.name !== 'Hôte' ? `${player.name} (${t('host', language)})` : player.name}
                       </span>
                       {player.isHost && (
-                        <Crown className="w-3 h-3 text-amber-400 shrink-0" title="Hôte" />
+                        <Crown className="w-3 h-3 text-amber-400 shrink-0" title={t('host', language)} />
                       )}
                     </div>
 
@@ -118,12 +119,10 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
                       {!isRevealed ? (
                         player.answeredCurrent ? (
                           <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.2 rounded-full border border-emerald-500/30 flex items-center gap-0.5">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Répondu
-                          </span>
+                            <CheckCircle2 className="w-2.5 h-2.5" />{t('answered', language)}</span>
                         ) : (
                           <span className="text-[9px] text-white/40 flex items-center gap-0.5 animate-pulse">
-                            <Clock className="w-2.5 h-2.5" /> En cours...
-                          </span>
+                            <Clock className="w-2.5 h-2.5" />{t('thinking', language)}</span>
                         )
                       ) : (
                         player.lastScoreEarned !== undefined && (
@@ -159,8 +158,7 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
       {onSendReaction && (
         <div className="border-t border-white/10 pt-2 flex items-center justify-between">
           <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-yellow-400" /> Réagir :
-          </span>
+            <Sparkles className="w-3 h-3 text-yellow-400" />{t('react', language)} :</span>
           <div className="flex items-center gap-1">
             {QUICK_REACTIONS.map((emoji) => (
               <button

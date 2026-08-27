@@ -87,6 +87,7 @@ export interface RoomState {
   difficulty: GameDifficulty;
   gameMode: GameMode;
   gameStyle: GameStyle;
+  language: string;
   durationPerQuestion: number;
   currentQuestionIndex: number;
   questionStartTime: number;
@@ -99,6 +100,7 @@ export interface GameSettings {
   difficulty: GameDifficulty;
   gameMode: GameMode;
   gameStyle: GameStyle;
+  language: string;
   durationPerQuestion: number; // in seconds (10, 15, 20, 30)
   masterVolume: number; // 0 to 1
   sfxVolume: number;    // 0 to 1

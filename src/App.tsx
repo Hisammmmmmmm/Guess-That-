@@ -1,3 +1,4 @@
+import { t } from './i18n/translations';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import YouTube from 'react-youtube';
@@ -96,6 +97,7 @@ export default function App() {
     difficulty: 'medium',
     gameMode: 'quiz',
     gameStyle: 'competitive',
+    language: 'fr',
     durationPerQuestion: 20,
     masterVolume: 0.8,
     sfxVolume: 0.85,
@@ -576,6 +578,7 @@ export default function App() {
         },
         difficulty: finalDifficulty,
         gameMode: finalMode,
+        language: settings.language,
         durationPerQuestion: settings.durationPerQuestion,
       });
       setScreen('room_lobby');
@@ -610,7 +613,7 @@ export default function App() {
         body: JSON.stringify({
           topic,
           difficulty: finalDifficulty,
-          language: 'fr',
+          language: settings.language,
           gameMode: finalMode,
         }),
       });
@@ -623,11 +626,20 @@ export default function App() {
         generatedData = JSON.parse(rawText);
       } catch (parseErr) {
         console.error('Failed to parse response as JSON:', rawText);
+        if (response.status === 405) {
+          throw new Error('Erreur 405 (Nginx Not Allowed) : Le serveur Nginx bloque les requêtes POST vers /api. Vous devez configurer un Reverse Proxy (proxy_pass) vers le port 3000 de Node.js.');
+        }
+        if (response.status === 502 || response.status === 504) {
+          throw new Error(`Erreur ${response.status} (Bad Gateway) : Le backend Node.js n'est pas démarré sur le port 3000 ou est inaccessible.`);
+        }
+        if (rawText.includes('<html') && (rawText.includes('nginx') || rawText.includes('405'))) {
+          throw new Error('Erreur Nginx : Le serveur web n\'est pas configuré en reverse-proxy vers Node.js.');
+        }
         throw new Error('Le serveur IA a mis trop de temps ou a renvoyé un format inattendu. Veuillez réessayer.');
       }
 
       if (!response.ok) {
-        throw new Error((generatedData as any)?.error || 'Erreur lors de la génération du quiz.');
+        throw new Error((generatedData as any)?.error || `Erreur serveur (${response.status}) lors de la génération du quiz.`);
       }
 
       setGenerationStep('Préchargement des médias...');
@@ -774,7 +786,7 @@ export default function App() {
         {
           questionIndex: currentQuestionIndex,
           question: currentQuestion,
-          selectedOption: settings.gameStyle === 'slideshow' ? currentQuestion.correctAnswer : 'Temps Écoulé',
+          selectedOption: settings.gameStyle === 'slideshow' ? currentQuestion.correctAnswer : t('time_up', settings.language),
           isCorrect: settings.gameStyle === 'slideshow',
           timeSpent: settings.durationPerQuestion,
           scoreEarned: 0,
@@ -1168,6 +1180,7 @@ export default function App() {
       quizData: preparedData,
       difficulty: settings.difficulty,
       gameMode: settings.gameMode,
+      language: settings.language,
       durationPerQuestion: settings.durationPerQuestion,
     });
   };
@@ -1184,6 +1197,7 @@ export default function App() {
         currentScreen={screen}
         quizData={quizData}
         settings={settings}
+        roomState={roomState}
         onUpdateSettings={updateSettings}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onExitToMenu={handleExitToMenu}
@@ -1287,6 +1301,7 @@ export default function App() {
       >
         {screen === 'playing' && quizData && (
           <ScoreBoard
+            language={settings.language}
             currentIndex={currentQuestionIndex}
             totalQuestions={quizData.questions.length}
             score={stats.score}
@@ -1309,6 +1324,7 @@ export default function App() {
               className="w-full"
             >
               <ThemeSelector
+                language={settings.language}
                 onSelectPreset={handleSelectPreset}
                 onGenerateCustom={(topic, difficulty, mode, style) => generateQuizFromTopic(topic, undefined, difficulty, mode, style)}
                 selectedMode={settings.gameMode}
@@ -1352,10 +1368,10 @@ export default function App() {
 
               <div className="flex flex-col gap-2">
                 <h3 className="text-2xl font-black text-white font-heading">
-                  Génération terminée !
+                  {t('generation_done', settings.language)}
                 </h3>
                 <p className="text-sm text-white/70">
-                  Ton quiz "{pendingQuizData.themeTitle || pendingQuizData.topic}" est prêt.
+                  {t("quiz_ready", settings.language).replace("%s", pendingQuizData.themeTitle || pendingQuizData.topic)}
                 </p>
               </div>
 
@@ -1368,7 +1384,7 @@ export default function App() {
                   className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold tracking-wider shadow-lg transform hover:-translate-y-0.5 transition-all active:scale-95 border border-purple-400/50 flex items-center justify-center gap-2"
                 >
                   <Sparkles className="w-5 h-5 text-yellow-300" />
-                  Créer le Salon Multijoueur
+                  {t('create_room', settings.language)}
                 </button>
               ) : (
                 <button
@@ -1378,7 +1394,7 @@ export default function App() {
                   }}
                   className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold tracking-wider shadow-lg transform hover:-translate-y-1 transition-all active:scale-95 border border-purple-400/50"
                 >
-                  Lancer la partie
+                  {t('start_game', settings.language)}
                 </button>
               )}
             </motion.div>
@@ -1395,6 +1411,7 @@ export default function App() {
               className="w-full flex items-center justify-center"
             >
               <MultiplayerLobby
+                language={settings.language}
                 roomState={roomState}
                 currentPlayerId={currentPlayerId || ''}
                 isQuizGenerating={isGenerating}
@@ -1477,6 +1494,7 @@ export default function App() {
               {roomState && (
                 <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col">
                   <MultiplayerScoreboard
+                        language={roomState?.language || settings.language}
                     roomState={roomState}
                     currentPlayerId={currentPlayerId || ''}
                     onSendReaction={(emoji) => (currentRoomCode || currentRoomCodeRef.current) && multiplayerService.sendReaction(currentRoomCode || currentRoomCodeRef.current || '', emoji)}
@@ -1566,6 +1584,7 @@ export default function App() {
                             primaryColor={quizData.primaryColor}
                             youtubeVideoId={activeVideoId}
                             gameMode={settings.gameMode}
+                            language={roomState?.language || settings.language}
                           />
                         </div>
                       )}
@@ -1637,6 +1656,7 @@ export default function App() {
                         </div>
                       ) : (
                         <VisualClue
+                        language={roomState?.language || settings.language}
                           imageUrl={currentQuestion.imageUrl}
                           secondaryImageUrl={currentQuestion.secondaryImageUrl}
                           secondaryImageSource={currentQuestion.secondaryImageSource}
@@ -1699,6 +1719,7 @@ export default function App() {
                         primaryColor={quizData.primaryColor}
                         youtubeVideoId={activeVideoId}
                         gameMode={settings.gameMode}
+                        language={roomState?.language || settings.language}
                       />
                     </div>
                   )}
@@ -1730,6 +1751,7 @@ export default function App() {
                   {/* Cadre des réponses */}
                   <div className="w-full bg-black/30 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-white/15 p-2 sm:p-2.5 shadow-xl max-w-4xl mx-auto shrink-0">
                     <QuestionCard
+                language={roomState?.language || settings.language}
                       question={currentQuestion}
                       selectedOption={selectedOption}
                       isAnswered={isAnswered}
@@ -1759,6 +1781,7 @@ export default function App() {
               className="w-full"
             >
               <ResultsView
+                language={settings.language}
                 stats={stats}
                 quizData={quizData}
                 onReplay={handleReplay}
@@ -1779,6 +1802,7 @@ export default function App() {
               className="w-full flex items-center justify-center"
             >
               <MultiplayerResultsView
+                language={settings.language}
                 roomState={roomState}
                 currentPlayerId={currentPlayerId || ''}
                 onReplay={handleReplay}
@@ -1810,6 +1834,7 @@ export default function App() {
 
       {/* Join Room Modal */}
       <JoinRoomModal
+        language={settings.language}
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         onJoinRoom={(code, name, avatar) => {

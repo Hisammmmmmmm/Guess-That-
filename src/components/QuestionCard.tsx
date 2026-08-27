@@ -3,7 +3,10 @@ import { CheckCircle2, XCircle, ArrowRight, Lightbulb, Zap, Clock } from 'lucide
 import { motion, AnimatePresence } from 'motion/react';
 import { Question } from '../types';
 
+import { t } from '../i18n/translations';
+
 interface QuestionCardProps {
+  language?: string;
   question: Question;
   selectedOption: string | null;
   isAnswered: boolean;
@@ -19,6 +22,7 @@ interface QuestionCardProps {
 }
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
+  language = 'fr',
   question,
   selectedOption,
   isAnswered,
@@ -177,7 +181,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                         ? `${autoAdvanceCountdown}s`
                         : '...'}
                     </strong>
-                    <span className="text-[10px] text-purple-300/70 ml-1.5 font-medium">(Hôte aux commandes)</span>
+                    <span className="text-[10px] text-purple-300/70 ml-1.5 font-medium">({t('host_in_control', language)})</span>
                   </span>
                 </div>
               ) : (
