@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import path from 'path';
@@ -45,6 +46,7 @@ interface ServerRoom {
   newQuizReady?: boolean;
   players: Map<string, ServerPlayer>;
   createdAt: number;
+  autoNextTimer?: any;
 }
 
 // In-memory active rooms map
@@ -111,7 +113,7 @@ function generateRoomCode(): string {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
@@ -397,11 +399,6 @@ async function startServer() {
 
       const ai = new GoogleGenAI({
         apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
       });
 
       let modeInstructions = '';
@@ -713,6 +710,85 @@ Niveau de difficulté : ${difficultyInstructions}`;
     let clientRoomCode: string | null = null;
     let clientPlayerId: string | null = null;
 
+    function advanceToNextQuestion(room: ServerRoom) {
+      if (room.autoNextTimer) {
+        clearTimeout(room.autoNextTimer);
+        room.autoNextTimer = null;
+      }
+
+      const totalQuestions = room.quizData?.questions?.length || 15;
+      if (room.currentQuestionIndex + 1 < totalQuestions) {
+        room.currentQuestionIndex += 1;
+        room.status = 'playing';
+        room.questionStartTime = Date.now();
+
+        room.players.forEach((p) => {
+          p.answeredCurrent = false;
+          p.isCorrect = undefined;
+          p.selectedOption = undefined;
+          p.lastScoreEarned = 0;
+        });
+
+        const serialized = serializeRoom(room);
+        broadcastToRoom(room, {
+          type: 'next_question_started',
+          room: serialized,
+        });
+        broadcastToRoom(room, {
+          type: 'room_state',
+          room: serialized,
+        });
+        broadcastToRoom(room, {
+          type: 'room_updated',
+          room: serialized,
+        });
+      } else {
+        room.status = 'game_over';
+        const serialized = serializeRoom(room);
+        broadcastToRoom(room, {
+          type: 'game_over',
+          room: serialized,
+        });
+        broadcastToRoom(room, {
+          type: 'room_state',
+          room: serialized,
+        });
+        broadcastToRoom(room, {
+          type: 'room_updated',
+          room: serialized,
+        });
+      }
+    }
+
+    function triggerRevealQuestion(room: ServerRoom) {
+      if (room.status === 'question_result' || room.status === 'game_over') return;
+      room.status = 'question_result';
+
+      if (room.autoNextTimer) {
+        clearTimeout(room.autoNextTimer);
+        room.autoNextTimer = null;
+      }
+
+      const serialized = serializeRoom(room);
+      broadcastToRoom(room, {
+        type: 'question_revealed',
+        room: serialized,
+      });
+      broadcastToRoom(room, {
+        type: 'room_state',
+        room: serialized,
+      });
+      broadcastToRoom(room, {
+        type: 'room_updated',
+        room: serialized,
+      });
+
+      // Synchronized auto-advance to next question after 5 seconds for all room members
+      room.autoNextTimer = setTimeout(() => {
+        advanceToNextQuestion(room);
+      }, 5000);
+    }
+
     ws.on('message', (raw) => {
       try {
         const data = JSON.parse(raw.toString());
@@ -861,6 +937,11 @@ Niveau de difficulté : ${difficultyInstructions}`;
             return ws.send(JSON.stringify({ type: 'error', message: 'Seul l’hôte peut lancer la partie.' }));
           }
 
+          if (room.autoNextTimer) {
+            clearTimeout(room.autoNextTimer);
+            room.autoNextTimer = null;
+          }
+
           room.status = 'playing';
           room.newQuizReady = false;
           room.currentQuestionIndex = 0;
@@ -875,11 +956,21 @@ Niveau de difficulté : ${difficultyInstructions}`;
             p.isCorrect = undefined;
             p.selectedOption = undefined;
             p.lastScoreEarned = 0;
+            p.answersHistory = {};
           });
 
+          const serialized = serializeRoom(room);
           broadcastToRoom(room, {
             type: 'game_started',
-            room: serializeRoom(room),
+            room: serialized,
+          });
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serialized,
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serialized,
           });
         }
 
@@ -942,17 +1033,17 @@ Niveau de difficulté : ${difficultyInstructions}`;
           });
 
           if (allAnswered) {
-            room.status = 'question_result';
+            triggerRevealQuestion(room);
+          } else {
             broadcastToRoom(room, {
-              type: 'question_revealed',
+              type: 'room_state',
+              room: serializeRoom(room),
+            });
+            broadcastToRoom(room, {
+              type: 'room_updated',
               room: serializeRoom(room),
             });
           }
-
-          broadcastToRoom(room, {
-            type: 'room_state',
-            room: serializeRoom(room),
-          });
         }
 
         // REVEAL QUESTION (Timer expired on host or manual trigger)
@@ -962,15 +1053,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
           const room = activeRooms.get(code);
           if (!room) return;
 
-          room.status = 'question_result';
-          broadcastToRoom(room, {
-            type: 'question_revealed',
-            room: serializeRoom(room),
-          });
-          broadcastToRoom(room, {
-            type: 'room_state',
-            room: serializeRoom(room),
-          });
+          triggerRevealQuestion(room);
         }
 
         // REFRESH / RESYNC ROOM
@@ -1037,34 +1120,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
             return ws.send(JSON.stringify({ type: 'error', message: 'Seul l’hôte peut passer à la question suivante.' }));
           }
 
-          const totalQuestions = room.quizData?.questions?.length || 15;
-          if (room.currentQuestionIndex + 1 < totalQuestions) {
-            room.currentQuestionIndex += 1;
-            room.status = 'playing';
-            room.questionStartTime = Date.now();
-
-            room.players.forEach((p) => {
-              p.answeredCurrent = false;
-              p.isCorrect = undefined;
-              p.selectedOption = undefined;
-              p.lastScoreEarned = 0;
-            });
-
-            broadcastToRoom(room, {
-              type: 'next_question_started',
-              room: serializeRoom(room),
-            });
-            broadcastToRoom(room, {
-              type: 'room_state',
-              room: serializeRoom(room),
-            });
-          } else {
-            room.status = 'game_over';
-            broadcastToRoom(room, {
-              type: 'game_over',
-              room: serializeRoom(room),
-            });
-          }
+          advanceToNextQuestion(room);
         }
 
         // REACTION

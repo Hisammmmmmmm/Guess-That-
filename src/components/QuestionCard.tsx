@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { CheckCircle2, XCircle, ArrowRight, Lightbulb, Zap } from 'lucide-react';
+import { CheckCircle2, XCircle, ArrowRight, Lightbulb, Zap, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Question } from '../types';
 
@@ -59,7 +59,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAnswered, question.options, onSelectOption, onNextQuestion]);
+  }, [isAnswered, question.options, onSelectOption, onNextQuestion, isHost, gameStyle]);
 
   const optionLetters = ['A', 'B', 'C', 'D'];
 
@@ -167,9 +167,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               !isHost ? (
                 <div
                   id="guest-countdown-badge"
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-500/20 border border-purple-400/40 text-purple-200 text-xs font-bold flex items-center justify-center gap-2 shrink-0 backdrop-blur-md shadow-inner"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-950/60 border border-purple-400/40 text-purple-200 text-xs font-bold flex items-center justify-center gap-2 shrink-0 backdrop-blur-md shadow-inner"
                 >
-                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+                  <Clock className="w-3.5 h-3.5 text-purple-300 animate-pulse shrink-0" />
                   <span>
                     {isLastQuestion ? 'Résultats dans' : 'Question suivante dans'}{' '}
                     <strong className="text-white text-sm font-black font-heading ml-1">
@@ -177,6 +177,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                         ? `${autoAdvanceCountdown}s`
                         : '...'}
                     </strong>
+                    <span className="text-[10px] text-purple-300/70 ml-1.5 font-medium">(Hôte aux commandes)</span>
                   </span>
                 </div>
               ) : (

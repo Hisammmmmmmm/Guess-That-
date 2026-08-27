@@ -19,6 +19,10 @@ class MultiplayerService {
     return this.currentPlayerId;
   }
 
+  public isConnected(): boolean {
+    return !!(this.ws && this.ws.readyState === WebSocket.OPEN);
+  }
+
   public connect(): Promise<boolean> {
     return new Promise((resolve) => {
       if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {

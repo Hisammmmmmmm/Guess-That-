@@ -268,34 +268,71 @@ export default function App() {
     };
 
     const handleRoomUpdated = (data: any) => {
+      if (!data?.room) return;
       setRoomState(data.room);
       if (data.room?.quizData?.questions?.length > 0) {
         setQuizData(data.room.quizData);
         setPendingQuizData(data.room.quizData);
       }
-      if (data.room?.status === 'question_result') {
+
+      if (data.room.status === 'question_result') {
         setIsAnswered(true);
+        if (ttsAudioRef.current) {
+          ttsAudioRef.current.pause();
+          ttsAudioRef.current = null;
+        }
+        if (currentPlayerId && data.room.players?.[currentPlayerId]) {
+          const me = data.room.players[currentPlayerId];
+          if (me.lastScoreEarned > 0) {
+            setScoreEarnedForCurrent(me.lastScoreEarned);
+          }
+        }
         startAutoAdvanceTimer(5);
-      } else if (data.room?.status === 'playing' && data.room.currentQuestionIndex !== undefined) {
+      } else if (data.room.status === 'playing' && data.room.currentQuestionIndex !== undefined) {
+        const nextQIndex = data.room.currentQuestionIndex;
         setCurrentQuestionIndex((prev) => {
-          if (prev !== data.room.currentQuestionIndex) {
+          const isNewQ = prev !== nextQIndex;
+          if (isNewQ) {
             clearAutoAdvanceTimer();
+            if (ttsAudioRef.current) {
+              ttsAudioRef.current.pause();
+              ttsAudioRef.current = null;
+            }
             setSelectedOption(null);
             setIsAnswered(false);
             setScoreEarnedForCurrent(0);
-            setTimeLeft(data.room.durationPerQuestion || settings.durationPerQuestion);
+
+            const duration = data.room.durationPerQuestion || settings.durationPerQuestion || 20;
+            const elapsed = data.room.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+            const remaining = Math.max(0.5, duration - elapsed);
+            setTimeLeft(remaining);
             lastTickSecondRef.current = -1;
             setScreen('playing');
             soundEngine.playQuestionTransition();
-            return data.room.currentQuestionIndex;
+            return nextQIndex;
           }
           return prev;
         });
+
+        // If player already answered in this room question
+        if (currentPlayerId && data.room.players?.[currentPlayerId]?.answeredCurrent) {
+          const me = data.room.players[currentPlayerId];
+          if (me.selectedOption) setSelectedOption(me.selectedOption);
+        }
+      } else if (data.room.status === 'game_over') {
+        clearAutoAdvanceTimer();
+        stopTimer();
+        soundEngine.stopAmbience();
+        setScreen('room_results');
       }
     };
 
     const handleGameStarted = (data: any) => {
       clearAutoAdvanceTimer();
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
       setRoomState(data.room);
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
@@ -304,7 +341,11 @@ export default function App() {
       setSelectedOption(null);
       setIsAnswered(false);
       setScoreEarnedForCurrent(0);
-      setTimeLeft(data.room.durationPerQuestion || settings.durationPerQuestion);
+
+      const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
+      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+      const remaining = Math.max(0.5, duration - elapsed);
+      setTimeLeft(remaining);
       lastTickSecondRef.current = -1;
       setScreen('playing');
 
@@ -317,8 +358,12 @@ export default function App() {
     const handleQuestionRevealed = (data: any) => {
       setRoomState(data.room);
       setIsAnswered(true);
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
 
-      if (currentPlayerId && data.room.players?.[currentPlayerId]) {
+      if (currentPlayerId && data.room?.players?.[currentPlayerId]) {
         const me = data.room.players[currentPlayerId];
         if (me.lastScoreEarned > 0) {
           setScoreEarnedForCurrent(me.lastScoreEarned);
@@ -329,12 +374,16 @@ export default function App() {
         }
       }
 
-      // Auto advance to next question after 5 seconds without clicking
+      // Auto advance to next question after 5 seconds
       startAutoAdvanceTimer(5);
     };
 
     const handleNextQuestionStarted = (data: any) => {
       clearAutoAdvanceTimer();
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
       setRoomState(data.room);
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
@@ -343,7 +392,11 @@ export default function App() {
       setSelectedOption(null);
       setIsAnswered(false);
       setScoreEarnedForCurrent(0);
-      setTimeLeft(data.room.durationPerQuestion || settings.durationPerQuestion);
+
+      const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
+      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+      const remaining = Math.max(0.5, duration - elapsed);
+      setTimeLeft(remaining);
       lastTickSecondRef.current = -1;
       setScreen('playing');
       soundEngine.playQuestionTransition();
@@ -351,9 +404,14 @@ export default function App() {
 
     const handleGameOver = (data: any) => {
       clearAutoAdvanceTimer();
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
       setRoomState(data.room);
       stopTimer();
       soundEngine.stopAmbience();
+      soundEngine.playGameOver();
       setScreen('room_results');
     };
 
@@ -387,7 +445,19 @@ export default function App() {
     multiplayerService.on('reaction', handleReaction);
     multiplayerService.on('error', handleError);
 
+    const handleVisibilityOrFocus = () => {
+      const code = currentRoomCodeRef.current || currentRoomCode;
+      if (code && multiplayerService.isConnected()) {
+        multiplayerService.refreshRoom(code);
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
     return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       multiplayerService.off('room_created', handleRoomCreated);
       multiplayerService.off('room_joined', handleRoomJoined);
       multiplayerService.off('joined_room', handleRoomJoined);
@@ -1027,8 +1097,12 @@ export default function App() {
       ttsAudioRef.current = null;
     }
 
-    // Multiplayer Mode Next Question (Host action or auto advance)
+    // Multiplayer Mode Next Question (Only Host can manually trigger next question)
     if (roomState && (currentRoomCode || currentRoomCodeRef.current)) {
+      const isHost = currentPlayerId ? roomState.hostId === currentPlayerId : false;
+      if (!isHost) {
+        return; // Guest players cannot trigger next question
+      }
       multiplayerService.nextQuestion(currentRoomCode || currentRoomCodeRef.current || '');
       return;
     }
@@ -1667,6 +1741,7 @@ export default function App() {
                       onHoverSound={() => soundEngine.playHover()}
                       gameStyle={settings.gameStyle}
                       autoAdvanceCountdown={autoAdvanceCountdown}
+                      isHost={roomState ? (currentPlayerId ? roomState.hostId === currentPlayerId : false) : true}
                     />
                   </div>
                 </div>

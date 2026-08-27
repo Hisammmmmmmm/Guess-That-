@@ -1,6 +1,6 @@
 {
-  "name": "Blind Test Ultimate",
-  "description": "Jeu interactif de Blind Test dynamique avec génération IA de 15 questions et images thématiques, ambiances sonores immersives, effets visuels et compte à rebours réactif.",
+  "name": "guess-that",
+  "description": "Guess That - Jeu interactif multijoueur et solo de Blind Test et Quiz propulsé par l'IA Gemini avec support audio YouTube, reconnaissance d'images, salons en temps réel WebSocket et QR codes.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
