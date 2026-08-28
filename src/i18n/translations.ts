@@ -3254,6 +3254,84 @@ const GLOBAL_FALLBACK_TRANSLATIONS: Record<string, Record<string, string>> = {
     ja: "AI生成を再試行",
     zh: "重试AI生成",
     ar: "إعادة محاولة إنشاء الذكاء الاصطناعي"
+  },
+  preset_gaming_title: {
+    fr: "Jeux Vidéo & Rétrogaming",
+    en: "Video Games & Retrogaming",
+    es: "Videojuegos y Retrogaming",
+    de: "Videospiele & Retrogaming",
+    it: "Videogiochi e Retrogaming",
+    pt: "Videogames e Retrogaming",
+    nl: "Videogames & Retrogaming",
+    ru: "Видеоигры и ретрогейминг",
+    ja: "ビデオゲーム & レトロゲーム",
+    zh: "电子游戏与复古游戏",
+    ar: "ألعاب الفيديو والألعاب الكلاسيكية"
+  },
+  preset_cinema_title: {
+    fr: "Cinéma & Blockbusters Cultes",
+    en: "Cinema & Cult Blockbusters",
+    es: "Cine y Éxitos de Culto",
+    de: "Kino & Kult-Blockbuster",
+    it: "Cinema e Blockbuster di Culto",
+    pt: "Cinema e Clássicos de Sucesso",
+    nl: "Bioscoop & Cultblockbusters",
+    ru: "Кино и культовые блокбастеры",
+    ja: "映画 & カルト・ブロックバスター",
+    zh: "电影与经典大片",
+    ar: "السينما والأفلام الرائجة"
+  },
+  preset_animes_title: {
+    fr: "Animés & Dessins Animés",
+    en: "Anime & Cartoons",
+    es: "Anime y Dibujos Animados",
+    de: "Anime & Zeichentrick",
+    it: "Anime e Cartoni Animati",
+    pt: "Animes e Desenhos Animados",
+    nl: "Anime & Cartoons",
+    ru: "Аниме и мультфильмы",
+    ja: "アニメ & マンガ",
+    zh: "动漫与卡通",
+    ar: "الأنمي والرسوم المتحركة"
+  },
+  preset_music_title: {
+    fr: "Hits & Légendes de la Musique",
+    en: "Hits & Music Legends",
+    es: "Éxitos y Leyendas Musicales",
+    de: "Hits & Musiklegenden",
+    it: "Successi e Leggende della Musica",
+    pt: "Hits e Lendas da Música",
+    nl: "Hits & Muzieklegendes",
+    ru: "Хиты и музыкальные легенды",
+    ja: "ヒット曲 & 音楽の伝説",
+    zh: "热门金曲与音乐传奇",
+    ar: "الأغاني الناجحة وأساطير الموسيقى"
+  },
+  preset_series_title: {
+    fr: "Séries TV Incontournables",
+    en: "Must-See TV-series",
+    es: "Series de TV Imperdibles",
+    de: "Unverzichtbare Serien",
+    it: "Serie TV Imperdibili",
+    pt: "Séries de TV Imperdíveis",
+    nl: "Onmisbare TV-series",
+    ru: "Популярные телесериалы",
+    ja: "必見のTVドラマ",
+    zh: "热门电视剧集",
+    ar: "المسلسلات التلفزيونية البارزة"
+  },
+  preset_world_title: {
+    fr: "Merveilles & Monuments du Monde",
+    en: "World Wonders & Monuments",
+    es: "Maravillas y Monumentos del Mundo",
+    de: "Weltwunder & Denkmäler",
+    it: "Meraviglie e Monumenti del Mondo",
+    pt: "Maravilhas e Monumentos do Mundo",
+    nl: "Wereldwonderen & Monumenten",
+    ru: "Чудеса и памятники мира",
+    ja: "世界の驚異 & モニュメント",
+    zh: "世界奇观与纪念碑",
+    ar: "عجائب ومعالم العالم"
   }
 };
 

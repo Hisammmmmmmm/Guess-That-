@@ -752,77 +752,50 @@ export function generateDynamicFallbackQuiz(
   const cleanTopic = topic.trim();
   const lower = cleanTopic.toLowerCase();
 
-  // Check direct preset matches across all languages and scripts
-  const isCinema = lower.includes('ciné') || lower.includes('film') || lower.includes('movie') || lower.includes('سينما') || lower.includes('映画') || lower.includes('cine') || lower.includes('película') || lower.includes('kino');
-  const isGaming = lower.includes('jeu') || lower.includes('game') || lower.includes('gaming') || lower.includes('playstation') || lower.includes('nintendo') || lower.includes('ألعاب') || lower.includes('ゲーム') || lower.includes('juego') || lower.includes('videojuego') || lower.includes('spiel');
-  const isAnimes = lower.includes('anim') || lower.includes('manga') || lower.includes('dessin') || lower.includes('dragon ball') || lower.includes('naruto') || lower.includes('one piece') || lower.includes('أنمي') || lower.includes('マンガ') || lower.includes('anime');
-  const isMusic = lower.includes('musique') || lower.includes('song') || lower.includes('chanson') || lower.includes('hit') || lower.includes('rock') || lower.includes('pop') || lower.includes('موسيقى') || lower.includes('音楽') || lower.includes('musica') || lower.includes('musik');
-  const isSeries = lower.includes('série') || lower.includes('serie') || lower.includes('tv') || lower.includes('netflix') || lower.includes('streaming') || lower.includes('مسلسل') || lower.includes('ドラマ');
-  const isWorld = lower.includes('monde') || lower.includes('voyage') || lower.includes('monument') || lower.includes('histoire') || lower.includes('géographie') || lower.includes('pays') || lower.includes('capitale') || lower.includes('عالم') || lower.includes('世界') || lower.includes('mundo');
+  // Check direct preset matches across ALL languages
+  const isCinema = lower.includes('ciné') || lower.includes('film') || lower.includes('movie') || lower.includes('cine') || lower.includes('película') || lower.includes('kino') || lower.includes('映画') || lower.includes('سينما') || lower.includes('电影') || lower.includes('кино');
+  const isGaming = lower.includes('jeu') || lower.includes('game') || lower.includes('gaming') || lower.includes('playstation') || lower.includes('nintendo') || lower.includes('juego') || lower.includes('videojuego') || lower.includes('spiel') || lower.includes('ビデオゲーム') || lower.includes('ألعاب') || lower.includes('游戏') || lower.includes('игры');
+  const isAnimes = lower.includes('anim') || lower.includes('manga') || lower.includes('dessin') || lower.includes('dragon ball') || lower.includes('naruto') || lower.includes('one piece') || lower.includes('anime') || lower.includes('アニメ') || lower.includes('أنمي') || lower.includes('动漫');
+  const isMusic = lower.includes('musique') || lower.includes('song') || lower.includes('chanson') || lower.includes('hit') || lower.includes('rock') || lower.includes('pop') || lower.includes('musica') || lower.includes('musik') || lower.includes('音楽') || lower.includes('موسيقى') || lower.includes('音乐');
+  const isSeries = lower.includes('série') || lower.includes('serie') || lower.includes('tv') || lower.includes('netflix') || lower.includes('streaming') || lower.includes('ドラマ') || lower.includes('مسلسل') || lower.includes('电视剧');
+  const isWorld = lower.includes('monde') || lower.includes('voyage') || lower.includes('monument') || lower.includes('histoire') || lower.includes('géographie') || lower.includes('pays') || lower.includes('capitale') || lower.includes('mundo') || lower.includes('世界') || lower.includes('عالم') || lower.includes('мир');
 
+  // Check direct preset matches across ALL languages
   if (isCinema) {
     const data = PRESET_QUIZ_DATA.cinema;
-    return language === 'en' ? {
+    return language === 'fr' ? { ...data, topic: cleanTopic } : {
       ...data,
       topic: cleanTopic,
       themeTitle: `Cult Movies & Cinema : ${cleanTopic}`,
       themeDescription: `15 legendary films and iconic scenes.`,
       questions: LOCALIZED_CINEMA_EN,
-    } : { ...data, topic: cleanTopic };
+    };
   }
   if (isGaming) {
     const data = PRESET_QUIZ_DATA.gaming;
-    return language === 'en' ? {
+    return language === 'fr' ? { ...data, topic: cleanTopic } : {
       ...data,
       topic: cleanTopic,
       themeTitle: `Video Games & Retrogaming : ${cleanTopic}`,
       themeDescription: `From Mario to Cyberpunk: 15 gaming legends.`,
       questions: LOCALIZED_GAMING_EN,
-    } : { ...data, topic: cleanTopic };
+    };
   }
   if (isAnimes) {
-    return {
-      topic: cleanTopic,
-      themeTitle: `Animés & Manga Culte : ${cleanTopic}`,
-      themeDescription: `15 énigmes sur l'univers animé de ${cleanTopic}`,
-      primaryColor: '#ec4899',
-      accentColor: '#f97316',
-      ambientSound: 'fantasy',
-      questions: ANIMES_QUESTIONS,
-    };
+    const data = PRESET_QUIZ_DATA.animes;
+    return { ...data, topic: cleanTopic, questions: ANIMES_QUESTIONS };
   }
   if (isMusic) {
-    return {
-      topic: cleanTopic,
-      themeTitle: `Légendes de la Musique : ${cleanTopic}`,
-      themeDescription: `15 pépites sonores et légendes du thème ${cleanTopic}`,
-      primaryColor: '#10b981',
-      accentColor: '#6366f1',
-      ambientSound: 'retro80s',
-      questions: MUSIC_QUESTIONS,
-    };
+    const data = PRESET_QUIZ_DATA.music;
+    return { ...data, topic: cleanTopic, questions: MUSIC_QUESTIONS };
   }
   if (isSeries) {
-    return {
-      topic: cleanTopic,
-      themeTitle: `Séries TV & Streaming : ${cleanTopic}`,
-      themeDescription: `15 énigmes d'anthologie sur l'univers de ${cleanTopic}`,
-      primaryColor: '#ef4444',
-      accentColor: '#f59e0b',
-      ambientSound: 'cinema',
-      questions: SERIES_QUESTIONS,
-    };
+    const data = PRESET_QUIZ_DATA.series;
+    return { ...data, topic: cleanTopic, questions: SERIES_QUESTIONS };
   }
   if (isWorld) {
-    return {
-      topic: cleanTopic,
-      themeTitle: `Merveilles & Voyage : ${cleanTopic}`,
-      themeDescription: `15 découvertes spectaculaires autour de ${cleanTopic}`,
-      primaryColor: '#3b82f6',
-      accentColor: '#10b981',
-      ambientSound: 'space',
-      questions: WORLD_QUESTIONS,
-    };
+    const data = PRESET_QUIZ_DATA.world;
+    return { ...data, topic: cleanTopic, questions: WORLD_QUESTIONS };
   }
 
   // Localization templates for custom topic generation in ALL 11 languages
