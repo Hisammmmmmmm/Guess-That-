@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { generateDynamicFallbackQuiz } from './src/data/fallbackGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -365,10 +366,27 @@ async function startServer() {
   app.get('/api/tts', async (req, res) => {
     try {
       const text = req.query.text as string;
-      const lang = (req.query.lang as string) || 'fr';
+      const langParam = ((req.query.lang as string) || 'fr').toLowerCase();
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
+
+      // Map app language code to google-tts-api supported language code
+      const ttsLangMap: Record<string, string> = {
+        'fr': 'fr',
+        'en': 'en',
+        'es': 'es',
+        'de': 'de',
+        'it': 'it',
+        'pt': 'pt',
+        'nl': 'nl',
+        'ru': 'ru',
+        'ja': 'ja',
+        'zh': 'zh-CN',
+        'ar': 'ar',
+      };
+      const lang = ttsLangMap[langParam] || langParam || 'fr';
+
       const googleTTS = await import('google-tts-api');
       const base64Audio = await googleTTS.getAudioBase64(text.slice(0, 200), {
         lang: lang,
@@ -388,17 +406,17 @@ async function startServer() {
       const { topic, difficulty = 'medium', language = 'fr', gameMode = 'quiz' } = req.body;
 
       const codeToName: Record<string, string> = {
-        'fr': 'Français',
+        'fr': 'Français (French)',
         'en': 'English',
-        'es': 'Español',
-        'de': 'Deutsch',
-        'it': 'Italiano',
-        'pt': 'Português',
-        'nl': 'Nederlands',
-        'ru': 'Русский',
-        'ja': '日本語',
-        'zh': '中文',
-        'ar': 'العربية'
+        'es': 'Español (Spanish)',
+        'de': 'Deutsch (German)',
+        'it': 'Italiano (Italian)',
+        'pt': 'Português (Portuguese)',
+        'nl': 'Nederlands (Dutch)',
+        'ru': 'Русский (Russian)',
+        'ja': '日本語 (Japanese)',
+        'zh': '中文 (Chinese)',
+        'ar': 'العربية (Arabic)'
       };
       const langName = codeToName[language] || language;
 
@@ -406,179 +424,191 @@ async function startServer() {
         return res.status(400).json({ error: 'Le sujet (topic) est requis.' });
       }
 
+      let parsedData: any = null;
+      let quotaExceededNotice = false;
+
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.warn('GEMINI_API_KEY not configured in environment. Using fallback generator.');
-        return res.status(503).json({
-          error: 'GEMINI_API_KEY manquante. Veuillez configurer la clé API dans les Paramètres.',
-          useFallback: true
+        console.warn('GEMINI_API_KEY not configured in environment. Using dynamic fallback engine for topic:', topic);
+        parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
+        quotaExceededNotice = true;
+      } else {
+        const ai = new GoogleGenAI({
+          apiKey,
         });
-      }
 
-      const ai = new GoogleGenAI({
-        apiKey,
-      });
+        let modeInstructions = '';
+        if (gameMode === 'visual_blind_test') {
+          modeInstructions = `MODE : VISUAL BLIND TEST (Image Recognition)
+- The objective is STRICTLY to recognize the visual entity displayed (character, object, place, animal, or originating franchise/movie/game).
+- "question" : MUST be very short, direct and in ${langName}, without any spoilers. Vary the phrasing according to the image context. Examples: "Who is this character?", "What is this object?", "Which movie/series is this from?", "Where is this location?".
+- "options" : 4 plausible, distinct choices in ${langName} (including 1 correct answer).
+- "clue" : Leave empty string "" (the image is the only clue).
+- "wikiSearchQuery" : The exact official entity name used to retrieve the high-quality picture (e.g. "Dragon Balls", "Master Sword Zelda", "Batarang", "Central Perk", "Millennium Falcon").`;
+        } else if (gameMode === 'music_blind_test') {
+          modeInstructions = `MODE : MUSIC BLIND TEST (Audio Recognition)
+- The objective is to identify cult songs, themes, OSTs or audio cues.
+- "question" : MUST focus strictly on listening, in ${langName}. Examples: "Which movie/show is this music from?", "Whose character theme is this?", "What is this sound from?". No spoilers in the question.
+- "options" : 4 distinct choices (artists, song names, movies, or characters) in ${langName}.
+- "youtubeSearchQuery" : The exact title of the OST/song/theme to find on YouTube (e.g. "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March").`;
+        } else {
+          modeInstructions = `MODE : CLASSIC QUIZ
+- Varied general knowledge questions, riddles, quotes and trivia on the theme, written entirely in ${langName}.
+- "youtubeSearchQuery" : For each question, provide the exact title of a song/OST/audio ambiance matching the question's topic.`;
+        }
 
-      let modeInstructions = '';
-      if (gameMode === 'visual_blind_test') {
-        modeInstructions = `MODE : BLIND TEST VISUEL (Reconnaissance d'image)
-- L'objectif est STRICTEMENT de reconnaître l'élément visuel affiché (personnage, objet, lieu, ou l'œuvre d'origine).
-- "question" : DOIT ÊTRE TRÈS COURTE, SIMPLE ET DIRECTE SANS AUCUN SPOILER. Varie les formulations selon le contexte de l'image. Exemples : "Qui est ce personnage ?", "Quel est cet objet ?", "À qui appartient cet objet ?", "De quelle série vient cette image ?", "Quel est ce lieu ?". Ne te limite pas à "Qui est ce personnage ?".
-- "options" : 4 propositions précises (dont 1 bonne réponse).
-- "clue" : Laisse ce champ vide "" (l'image est l'unique support de devinette).
-- "wikiSearchQuery" : LE NOM COMPLET OFFICIEL de l'entité/objet/série pour obtenir son image via moteur de recherche (ex: "Dragon Balls", "Épée de légende Zelda", "Batarang", "Central Perk", "Millennium Falcon"). Sois très précis pour garantir une bonne image.`;
-      } else if (gameMode === 'music_blind_test') {
-        modeInstructions = `MODE : BLIND TEST MUSICAL (Reconnaissance audio & thèmes)
-- L'objectif est d'identifier les musiques cultes, génériques, OST ou thèmes sonores.
-- "question" : DOIT porter UNIQUEMENT sur l'écoute. Pose SIMPLEMENT l'une de ces questions : "À quelle série/film vient cette musique ?", "De quel personnage cette musique est-elle le thème ?" ou "C'est le son de quoi ?". NE DONNE AUCUN SPOILER DANS LA QUESTION.
-- "options" : 4 propositions de morceaux, œuvres ou personnages.
-- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March"). Il servira à jouer la vraie musique.`;
-      } else {
-        modeInstructions = `MODE : QUIZ CLASSIQUE
-- Questions variées de culture générale, énigmes, citations et devinettes sur le thème.
-- "youtubeSearchQuery" : POUR CHAQUE QUESTION, fournis LE TITRE EXACT d'une musique, OST, ou ambiance sonore liée spécifiquement à la réponse ou au sujet de cette question (ex: "Musique Tristesse et Douleur Naruto", "Star Wars Imperial March", "Ambiance sonore forêt magique"). Cette musique sera jouée en fond sonore pendant la question.`;
-      }
+        let difficultyInstructions = '';
+        if (difficulty === 'expert') {
+          difficultyInstructions = `EXPERT: Highest difficulty for masters. Precise and challenging questions. The 4 options must be very similar, vicious and designed to test real knowledge.`;
+        } else if (difficulty === 'hard') {
+          difficultyInstructions = `HARD: Obscure details, secondary characters, rare objects, specific places. No easy questions.`;
+        } else if (difficulty === 'medium') {
+          difficultyInstructions = `MEDIUM: Balanced mix between popular knowledge and tricky questions.`;
+        } else {
+          difficultyInstructions = `EASY: Accessible for beginners, famous elements and iconic moments.`;
+        }
 
-      let difficultyInstructions = '';
-      if (difficulty === 'expert') {
-        difficultyInstructions = `EXPERT : Niveau d'érudit absolu. Sélectionne les éléments les plus pointus, obscurs ou spécifiques possibles. Les questions doivent être ultra-précises. Les 4 propositions de réponses doivent être extrêmement similaires, vicieuses et conçues pour induire en erreur le joueur. Laisse aucune place au hasard.`;
-      } else if (difficulty === 'hard') {
-        difficultyInstructions = `TRÈS DIFFICILE : Choisis les éléments les plus obscurs, des personnages très secondaires, des objets rares, des lieux très spécifiques ou des thèmes musicaux oubliés. Aucune question facile ou moyenne.`;
-      } else if (difficulty === 'medium') {
-        difficultyInstructions = `MOYEN : Équilibre entre des éléments connus et quelques pièges.`;
-      } else {
-        difficultyInstructions = `FACILE : Pour les débutants, les éléments les plus emblématiques et connus.`;
-      }
+        const prompt = `CRITICAL LANGUAGE REQUIREMENT:
+The user selected language: "${langName}" (Language Code: "${language}").
+EVERY SINGLE USER-FACING TEXT FIELD in your JSON response ("themeTitle", "themeDescription", "question", "options", "correctAnswer", "clue", "trivia", "category") MUST BE WRITTEN 100% EXCLUSIVELY IN ${langName.toUpperCase()}.
+- Do NOT output French or English unless that specific language is requested.
+- All 15 questions MUST be in ${langName}.
+- All 4 options and the correctAnswer for every question MUST be in ${langName}.
+- The trivia and clue MUST be in ${langName}.
 
-      const prompt = `Tu es le créateur expert du jeu "Blind Test Ultimate".
-Génère un quiz de 15 énigmes captivantes et stimulantes sur le thème suivant : "${topic}".
+Generate a 15-question quiz for the game "GuessThat!" on the following topic: "${topic}".
 
 ${modeInstructions}
 
-RÈGLES IMPORTANTES :
-1. Génère EXACTEMENT 15 questions progressives (de la plus accessible à la plus pointue pour ce niveau).
-2. Pour CHAQUE question :
-   - "question" : L'énoncé précis (très court et adapté au mode).
-   - "options" : 4 propositions crédibles et distinctes. ATTENTION : Mélange impérativement l'ordre des options de façon aléatoire (la bonne réponse NE DOIT PAS être systématiquement en première position !).
-   - "correctAnswer" : La réponse exacte (doit correspondre mot pour mot à l'une des 4 options).
-   - "wikiSearchQuery" : Le terme précis pour trouver l'IMAGE (ex: "Monkey D. Luffy", "Sabre laser Star Wars", "Pikachu"). ATTENTION : Cherche l'objet ou le personnage spécifique dont on parle, évite le logo de la série !
-   - "youtubeSearchQuery" : (Seulement pour Blind Test Musical) Le terme exact pour trouver la musique sur YouTube.
-   - "clue" : Un court indice (ou vide si blind test visuel).
-   - "audioNotes" : Un tableau de 4 à 7 fréquences sonores en Hertz (ex: [261.63, 329.63, 392.0, 523.25]) représentant un motif mélodique (optionnel si musical avec youtube).
-   - "imagePrompt" : Une courte description textuelle de l'élément visuel à identifier.
-   - "trivia" : Une anecdote captivante, insolite ou croustillante ("Le savais-tu ?").
-   - "category" : La sous-catégorie précise de l'élément (ex: "Personnage", "Film", "Monument", "Acteur", "Jeu vidéo", "Groupe de musique", "Espèce animale"). Utilisée pour cibler la recherche d'images complémentaires en anglais.
-3. Pour le thème global :
-   - "themeTitle" : Un titre percutant pour le blind test.
-   - "themeDescription" : Une courte phrase d'accroche pour ce thème.
-   - "primaryColor" : Une couleur hex dominante adaptée (ex: "#ec4899", "#8b5cf6", "#f59e0b", "#10b981", "#3b82f6", "#ef4444").
-   - "accentColor" : Une couleur hex secondaire contrastée.
-   - "ambientSound" : L'un de ces choix sonores obligatoirement : "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
+RULES:
+1. Generate EXACTLY 15 questions progressive in difficulty for: ${difficultyInstructions}.
+2. For EACH question:
+   - "question" : Concise and engaging question in ${langName}.
+   - "options" : Array of 4 distinct choices in ${langName}. ABSOLUTELY NEVER append, glue, or include the theme/topic title in the options (e.g. if topic is "Animés", option is "Naruto", NOT "Naruto 「Animés」" or "Naruto (Animés)"). The options must be ONLY the answer itself. Shuffle them randomly (the correct answer MUST NOT always be in first position!).
+   - "correctAnswer" : Exact string matching one of the 4 options word-for-word in ${langName}.
+   - "wikiSearchQuery" : Precise search term to retrieve the image (e.g. "Monkey D. Luffy", "Lightsaber Star Wars", "Pikachu").
+   - "youtubeSearchQuery" : Search query for the theme or soundtrack on YouTube.
+   - "clue" : Short helpful clue in ${langName} (empty "" if visual blind test).
+   - "audioNotes" : Array of 4 to 7 frequencies in Hz (e.g. [261.63, 329.63, 392.0, 523.25]).
+   - "imagePrompt" : Visual description in ${langName}.
+   - "trivia" : A captivating "Did you know?" trivia fact in ${langName}.
+   - "category" : Precise subcategory in ${langName}.
+3. For the theme:
+   - "themeTitle" : Catchy title in ${langName}.
+   - "themeDescription" : Short description in ${langName}.
+   - "primaryColor" : Dominant hex color (e.g. "#ec4899", "#8b5cf6", "#f59e0b", "#10b981", "#3b82f6", "#ef4444").
+   - "accentColor" : Contrasted secondary hex color.
+   - "ambientSound" : One of: "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
 
-Langue Cible Obligatoire : ${langName} (${language}).
-Tu DOIS IMPÉRATIVEMENT générer TOUT le texte (questions, options, réponses, indices, anecdotes, titre) EXCLUSIVEMENT dans cette langue : "${langName}".
-Niveau de difficulté : ${difficultyInstructions}`;
+DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues, title) is strictly in ${langName}.`;
 
-      const config = {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            topic: { type: Type.STRING },
-            themeTitle: { type: Type.STRING },
-            themeDescription: { type: Type.STRING },
-            primaryColor: { type: Type.STRING },
-            accentColor: { type: Type.STRING },
-            themeMusicQuery: {
-              type: Type.STRING,
-              description: 'Exact YouTube search query for the overall theme background soundtrack (e.g. "Harry Potter Hedwig Theme OST", "Star Wars Main Theme", "80s retro quiz game show music")'
-            },
-            ambientSound: {
-              type: Type.STRING,
-              description: 'One of: synthwave, cinema, retro80s, fantasy, electro, jazzy, nature, space'
-            },
-            themeBgImage: { type: Type.STRING },
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.INTEGER },
-                  question: { type: Type.STRING },
-                  options: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
+        const config = {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              topic: { type: Type.STRING },
+              themeTitle: { type: Type.STRING },
+              themeDescription: { type: Type.STRING },
+              primaryColor: { type: Type.STRING },
+              accentColor: { type: Type.STRING },
+              themeMusicQuery: {
+                type: Type.STRING,
+                description: 'Exact YouTube search query for the overall theme background soundtrack (e.g. "Harry Potter Hedwig Theme OST", "Star Wars Main Theme", "80s retro quiz game show music")'
+              },
+              ambientSound: {
+                type: Type.STRING,
+                description: 'One of: synthwave, cinema, retro80s, fantasy, electro, jazzy, nature, space'
+              },
+              themeBgImage: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.INTEGER },
+                    question: { type: Type.STRING },
+                    options: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING }
+                    },
+                    correctAnswer: { type: Type.STRING },
+                    wikiSearchQuery: { type: Type.STRING },
+                    youtubeSearchQuery: { type: Type.STRING },
+                    clue: { type: Type.STRING },
+                    audioNotes: {
+                      type: Type.ARRAY,
+                      items: { type: Type.NUMBER }
+                    },
+                    imagePrompt: { type: Type.STRING },
+                    imageUrl: { type: Type.STRING },
+                    trivia: { type: Type.STRING },
+                    category: { type: Type.STRING }
                   },
-                  correctAnswer: { type: Type.STRING },
-                  wikiSearchQuery: { type: Type.STRING },
-                  youtubeSearchQuery: { type: Type.STRING },
-                  clue: { type: Type.STRING },
-                  audioNotes: {
-                    type: Type.ARRAY,
-                    items: { type: Type.NUMBER }
-                  },
-                  imagePrompt: { type: Type.STRING },
-                  imageUrl: { type: Type.STRING },
-                  trivia: { type: Type.STRING },
-                  category: { type: Type.STRING }
-                },
-                required: ['id', 'question', 'options', 'correctAnswer', 'clue', 'trivia']
+                  required: ['id', 'question', 'options', 'correctAnswer', 'clue', 'trivia']
+                }
               }
+            },
+            required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
+          }
+        };
+
+        const candidateModels = [
+          'gemini-2.5-flash',
+          'gemini-2.5-flash-lite',
+          'gemini-3.7-flash',
+          'gemini-flash-latest',
+        ];
+        let response: any = null;
+        let lastError: any = null;
+
+        for (const modelName of candidateModels) {
+          try {
+            response = await ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+              config: config
+            });
+            if (response && response.text) {
+              console.log(`Successfully generated quiz with model: ${modelName}`);
+              break;
             }
-          },
-          required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
-        }
-      };
-
-      const candidateModels = [
-        'gemini-3.7-flash',
-        'gemini-flash-latest',
-        'gemini-3.1-flash-lite',
-        'gemini-2.5-flash',
-      ];
-      let response: any = null;
-      let lastError: any = null;
-
-      for (const modelName of candidateModels) {
-        try {
-          response = await ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-            config: config
-          });
-          if (response && response.text) {
-            console.log(`Successfully generated quiz with model: ${modelName}`);
-            break;
+          } catch (err: any) {
+            lastError = err;
+            console.warn(`Model ${modelName} failed (${err.message || err}), falling back to next available model...`);
           }
-        } catch (err: any) {
-          lastError = err;
-          console.warn(`Model ${modelName} failed, falling back to next available fast model...`, err.message || err);
+        }
+
+        // Robust JSON extraction and cleaning
+        const cleanAndParseJSON = (raw: string) => {
+          let str = raw.trim();
+          str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          try {
+            return JSON.parse(str);
+          } catch {
+            const match = str.match(/\{[\s\S]*\}/);
+            if (match) {
+              return JSON.parse(match[0]);
+            }
+            throw new Error('Format JSON invalide reçu du modèle IA.');
+          }
+        };
+
+        if (!response || !response.text) {
+          console.warn('All AI models failed or quota exceeded:', lastError?.message);
+          console.log('Engaging high-fidelity dynamic fallback generator for topic:', topic);
+          parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
+          quotaExceededNotice = true;
+        } else {
+          try {
+            parsedData = cleanAndParseJSON(response.text);
+          } catch (parseErr) {
+            console.warn('JSON parsing error from AI response, using dynamic fallback generator:', parseErr);
+            parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
+            quotaExceededNotice = true;
+          }
         }
       }
-
-      if (!response || !response.text) {
-        throw new Error(lastError?.message || 'Aucune réponse générée par les modèles IA.');
-      }
-
-      const responseText = response.text;
-      
-      // Robust JSON extraction and cleaning
-      const cleanAndParseJSON = (raw: string) => {
-        let str = raw.trim();
-        // Remove markdown backtick blocks if present
-        str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-        try {
-          return JSON.parse(str);
-        } catch {
-          const match = str.match(/\{[\s\S]*\}/);
-          if (match) {
-            return JSON.parse(match[0]);
-          }
-          throw new Error('Format JSON invalide reçu du modèle IA.');
-        }
-      };
-
-      const parsedData = cleanAndParseJSON(responseText);
 
       // Helper function to shuffle options randomly
       const shuffle = <T>(arr: T[]): T[] => {
@@ -590,6 +620,14 @@ Niveau de difficulté : ${difficultyInstructions}`;
         return result;
       };
 
+      // Fetch authentic image for theme background first
+      const themeWikiImg = await fetchDDGImage(parsedData.themeTitle || topic, topic, topic, 0);
+      if (themeWikiImg) {
+        parsedData.themeBgImage = themeWikiImg;
+      } else if (!parsedData.themeBgImage || !parsedData.themeBgImage.startsWith('http')) {
+        parsedData.themeBgImage = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png';
+      }
+
       // Fetch authentic images for all 15 questions in parallel
       if (Array.isArray(parsedData.questions)) {
         // Preload ytSearch if needed
@@ -599,22 +637,42 @@ Niveau de difficulté : ${difficultyInstructions}`;
           ytSearchFn = ytSearch.default || ytSearch;
         }
 
+        const isQuizOnly = gameMode === 'quiz';
+        const topicImageUrl = parsedData.themeBgImage;
+
         const processedQuestions = await Promise.all(
           parsedData.questions.map(async (q: any, idx: number) => {
-            const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
-            
-            // Parallel fetch: Image 1 (Web engine) and Image 2 (Wikipedia / Wikimedia / Alternative search with category+answer)
-            const [wikiImg, secondImgData] = await Promise.all([
-              fetchDDGImage(primaryQuery, q.correctAnswer, topic, 0),
-              fetchSecondImage(primaryQuery, q.correctAnswer, q.category || '', topic)
-            ]);
+            let finalImg1 = topicImageUrl;
+            let finalImg2: string | undefined = undefined;
+            let secondImgSource = 'Wikipedia';
 
-            // Primary Image fallback
-            const finalImg1 = wikiImg || secondImgData.url || `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`;
-            // Secondary Image (guaranteed different angle/source or alternate query)
-            const finalImg2 = (secondImgData.url && secondImgData.url !== finalImg1) 
-              ? secondImgData.url 
-              : (await fetchDDGImage(primaryQuery, q.correctAnswer, topic, 1)) || finalImg1;
+            // In quiz mode: use a procedural generation for unique images per question based on the topic without spoiling the answer
+            if (isQuizOnly) {
+              const styles = [
+                'cinematic atmospheric', 'minimalist aesthetic', 'epic lighting', 'retro vintage', 
+                'abstract geometric', 'neon cyberpunk', 'watercolor illustration', 'dark mood',
+                'bright colorful', 'surreal dreamscape', 'oil painting style', 'pencil sketch style',
+                '3d render octane', 'low poly flat', 'golden hour photography'
+              ];
+              const style = styles[idx % styles.length];
+              finalImg1 = `https://image.pollinations.ai/prompt/${encodeURIComponent(topic + ' ' + style)}?width=1280&height=720&seed=${idx * 43 + 7}&nologo=true`;
+            } else {
+              const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
+              
+              // Parallel fetch: Image 1 (Web engine) and Image 2 (Wikipedia / Wikimedia / Alternative search with category+answer)
+              const [wikiImg, secondImgData] = await Promise.all([
+                fetchDDGImage(primaryQuery, q.correctAnswer, topic, 0),
+                fetchSecondImage(primaryQuery, q.correctAnswer, q.category || '', topic)
+              ]);
+
+              // Primary Image fallback
+              finalImg1 = wikiImg || secondImgData.url || topicImageUrl || `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`;
+              // Secondary Image (guaranteed different angle/source or alternate query)
+              finalImg2 = (secondImgData.url && secondImgData.url !== finalImg1) 
+                ? secondImgData.url 
+                : (await fetchDDGImage(primaryQuery, q.correctAnswer, topic, 1)) || finalImg1;
+              secondImgSource = secondImgData.source || 'Alternative';
+            }
 
             // If music blind test and youtube query provided, search youtube
             let youtubeVideoIds = [];
@@ -646,11 +704,11 @@ Niveau de difficulté : ${difficultyInstructions}`;
               id: idx + 1,
               options: optionsList,
               imageUrl: finalImg1,
-              secondaryImageUrl: finalImg2,
-              secondaryImageSource: secondImgData.source || 'Alternative',
+              secondaryImageUrl: isQuizOnly ? undefined : finalImg2,
+              secondaryImageSource: isQuizOnly ? 'Wikipedia' : secondImgSource,
               youtubeVideoId: youtubeVideoIds[0],
               youtubeVideoIds: youtubeVideoIds,
-              imagePrompt: q.imagePrompt || q.correctAnswer,
+              imagePrompt: isQuizOnly ? (parsedData.themeTitle || topic) : (q.imagePrompt || q.correctAnswer),
               audioNotes: Array.isArray(q.audioNotes) && q.audioNotes.length > 0
                 ? q.audioNotes
                 : [330, 392, 440, 523.25, 659.25, 587.33]
@@ -658,14 +716,6 @@ Niveau de difficulté : ${difficultyInstructions}`;
           })
         );
         parsedData.questions = processedQuestions;
-      }
-
-      // Fetch authentic image for theme background
-      const themeWikiImg = await fetchDDGImage(parsedData.themeTitle || topic, topic);
-      if (themeWikiImg) {
-        parsedData.themeBgImage = themeWikiImg;
-      } else if (!parsedData.themeBgImage || !parsedData.themeBgImage.startsWith('http')) {
-        parsedData.themeBgImage = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png';
       }
 
       // Fetch theme YouTube soundtrack for quiz background music
@@ -690,15 +740,29 @@ Niveau de difficulté : ${difficultyInstructions}`;
       }
 
       parsedData.topic = topic;
+      parsedData.quotaExceededNotice = quotaExceededNotice;
+      parsedData.fallbackUsed = quotaExceededNotice;
 
       return res.json(parsedData);
     } catch (err: any) {
-      console.error('Error generating quiz:', err);
-      const isQuota = err.message?.includes('resource_exhausted') || err.message?.includes('Quota exceeded') || err.message?.includes('429');
-      const errorMsg = isQuota
-        ? 'Quota Gemini dépassé (limite de requêtes/tokens atteinte). Veuillez patienter quelques instants avant de réessayer.'
-        : ('Erreur lors de la génération du quiz: ' + (err.message || 'Erreur interne'));
-      return res.status(500).json({ error: errorMsg });
+      console.error('Error generating quiz, engaging emergency safety fallback:', err);
+      try {
+        const emergencyData = generateDynamicFallbackQuiz(
+          (req.body?.topic || 'Culture Générale'),
+          req.body?.gameMode || 'quiz',
+          req.body?.difficulty || 'medium',
+          req.body?.language || 'fr'
+        );
+        emergencyData.quotaExceededNotice = true;
+        emergencyData.fallbackUsed = true;
+        return res.json(emergencyData);
+      } catch (fallbackErr) {
+        const isQuota = err.message?.includes('resource_exhausted') || err.message?.includes('Quota exceeded') || err.message?.includes('429');
+        const errorMsg = isQuota
+          ? 'Quota Gemini dépassé (limite de requêtes/tokens atteinte). Veuillez patienter quelques instants avant de réessayer.'
+          : ('Erreur lors de la génération du quiz: ' + (err.message || 'Erreur interne'));
+        return res.status(500).json({ error: errorMsg });
+      }
     }
   });
 

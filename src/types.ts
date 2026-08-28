@@ -29,11 +29,12 @@ export interface Question {
   correctAnswer: string;
   clue: string;
   audioNotes?: number[]; // Frequency or MIDI notes for melody synth (e.g. [261.6, 329.6, 392.0, 523.2])
+  wikiSearchQuery?: string;
   youtubeSearchQuery?: string;
   youtubeVideoId?: string;
   youtubeVideoIds?: string[];
-  imagePrompt: string;
-  imageUrl: string;
+  imagePrompt?: string;
+  imageUrl?: string;
   secondaryImageUrl?: string;
   secondaryImageSource?: string;
   trivia: string;
@@ -46,11 +47,13 @@ export interface QuizData {
   themeDescription: string;
   primaryColor: string;
   accentColor: string;
-  themeBgImage: string;
+  themeBgImage?: string;
   themeMusicQuery?: string;
   themeYoutubeVideoId?: string;
   ambientSound: AmbientSoundType;
   questions: Question[];
+  quotaExceededNotice?: boolean;
+  fallbackUsed?: boolean;
 }
 
 export type GameDifficulty = 'easy' | 'medium' | 'hard' | 'expert';

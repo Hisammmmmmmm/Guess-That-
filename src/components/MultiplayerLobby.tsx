@@ -13,12 +13,15 @@ import {
   Radio,
   Edit2,
   X,
-  Globe
+  Globe,
+  RotateCcw,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { t, languages } from '../i18n/translations';
+import { FlagIcon } from './FlagIcon';
 
 interface MultiplayerLobbyProps {
   language?: string;
@@ -30,6 +33,7 @@ interface MultiplayerLobbyProps {
   onStartGame: () => void;
   onLeaveRoom: () => void;
   onSendReaction: (emoji: string) => void;
+  onRetryGeneration?: () => void;
   onPlayClickSound?: () => void;
   onUpdateProfile?: (name: string, avatar: string) => void;
   floatingReactions?: { id: string; emoji: string; name: string }[];
@@ -48,6 +52,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   onStartGame,
   onLeaveRoom,
   onSendReaction,
+  onRetryGeneration,
   onPlayClickSound,
   onUpdateProfile,
   floatingReactions = [],
@@ -156,12 +161,12 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
           <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-          <span>Salon Multijoueur en Direct</span>
+          <span>{t('live_multiplayer_lobby', language)}</span>
         </div>
       </div>
 
-      {/* Live AI Generation / Loading Banner (Runs simultaneously with lobby!) */}
-      {isQuizGenerating && (
+      {/* Live AI Generation / Loading Banner or Error Banner */}
+      {isQuizGenerating ? (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -171,18 +176,50 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             <Loader2 className="w-4 h-4 text-purple-300 animate-spin shrink-0" />
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-bold text-white truncate">
-                ⚡ Préparation des questions, images & musiques en cours...
+                {t('preparing_questions_media', language)}
               </span>
               <span className="text-[10px] text-purple-200/70 truncate">
-                {generationStepText || 'Génération simultanée : vos amis peuvent déjà scanner et rejoindre le salon !'}
+                {generationStepText || t('simultaneous_generation_hint', language)}
               </span>
             </div>
           </div>
           <span className="px-2 py-0.5 rounded-full bg-purple-500/30 border border-purple-400/50 text-[10px] font-extrabold text-purple-200 shrink-0 animate-pulse">
-            En tâche de fond
+            {t('in_background', language)}
           </span>
         </motion.div>
-      )}
+      ) : errorMessage ? (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 rounded-2xl bg-rose-500/20 border border-rose-500/50 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+            <div className="flex flex-col min-w-0 text-left">
+              <span className="text-xs font-bold text-rose-200">
+                {t('error_label', language)}
+              </span>
+              <span className="text-[11px] text-rose-100/90 leading-tight">
+                {errorMessage}
+              </span>
+            </div>
+          </div>
+          {isHost && onRetryGeneration && (
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick();
+                onRetryGeneration();
+              }}
+              id="banner-retry-generation-btn"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer active:scale-95 transition-all"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{t('retry_ai_generation', language)}</span>
+            </button>
+          )}
+        </motion.div>
+      ) : null}
 
       {/* Main Compact Bento Grid (QR Code on Left, Room info & Players on Right) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-stretch">
@@ -197,9 +234,9 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
           <div className="text-center flex flex-col items-center gap-0.5">
             <span className="text-[10px] font-extrabold text-purple-300 uppercase tracking-widest">
-              Rejoindre avec Smartphone
+              {t('join_with_phone', language)}
             </span>
-            <span className="text-xs text-white/70">Scannez le QR Code pour entrer</span>
+            <span className="text-xs text-white/70">{t('scan_qr_to_enter', language)}</span>
           </div>
 
           {/* QR Code Display */}
@@ -212,7 +249,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               />
             ) : (
               <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-lg bg-slate-900 flex items-center justify-center text-white/50 text-[10px]">
-                Génération...
+                {t('loading', language)}
               </div>
             )}
           </div>
@@ -220,7 +257,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           {/* Room Code Badge */}
           <div className="w-full flex items-center justify-between bg-white/10 px-3 py-2 rounded-xl border border-white/20">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">Code :</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">{t('code_label', language)}</span>
               <span className="text-xl sm:text-2xl font-black font-heading tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-pink-200 to-amber-200">
                 {roomState.code}
               </span>
@@ -229,7 +266,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               id="btn-copy-code"
               onClick={handleCopyCode}
               className="p-1.5 rounded-lg bg-purple-500/30 hover:bg-purple-500/50 text-white transition-all cursor-pointer"
-              title="Copier le code"
+              title={t('copy_code', language)}
             >
               {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
@@ -242,7 +279,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             className="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-[11px] font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5 text-purple-400" />
-            <span>{copiedLink ? 'Lien copié dans le presse-papier !' : 'Copier le lien d’invitation'}</span>
+            <span>{copiedLink ? t('link_copied_clipboard', language) : t('copy_invite_link', language)}</span>
           </button>
         </div>
 
@@ -253,22 +290,22 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           <div className="flex flex-col gap-1 border-b border-white/10 pb-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                Blind Test Sélectionné
+                {t('selected_blind_test', language)}
               </span>
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
-                {roomState.difficulty.toUpperCase()} • {roomState.gameMode === 'music_blind_test' ? 'Blind Test Musical' : roomState.gameMode === 'visual_blind_test' ? 'Blind Test Visuel' : 'Quiz'}
+                {roomState.difficulty.toUpperCase()} • {roomState.gameMode === 'music_blind_test' ? t('music_blind_test', language) : roomState.gameMode === 'visual_blind_test' ? t('visual_blind_test', language) : t('quiz', language)}
               </span>
             </div>
             <h2 className="text-lg sm:text-xl font-black text-white font-heading truncate">
               {roomState.themeTitle || roomState.topic}
             </h2>
             <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/70">
-              <span className="flex items-center gap-1" title="Langue du salon">
-                <Globe className="w-3 h-3 opacity-70" />
-                {languages.find(l => l.code === roomState.language)?.flag || '🇫🇷'} {languages.find(l => l.code === roomState.language)?.name || 'Français'}
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 text-white" title={t('room_language', language)}>
+                <FlagIcon code={roomState.language || 'fr'} className="w-4 h-3 rounded-xs" />
+                <span className="font-semibold">{languages.find(l => l.code === roomState.language)?.name || 'Français'}</span>
               </span>
               <span>⏱️ {roomState.durationPerQuestion || 20}s / question</span>
-              <span>🎯 {questionsCount > 0 ? `${questionsCount} questions prêtes` : 'Chargement questions...'}</span>
+              <span>🎯 {questionsCount > 0 ? `${questionsCount} ${t('questions_ready', language)}` : t('loading_questions', language)}</span>
             </div>
           </div>
 
@@ -279,7 +316,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               <div className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-purple-400" />
                 <span className="text-xs font-bold text-white">
-                  Joueurs dans le salon ({playersList.length})
+                  {t('players_in_room', language)} ({playersList.length})
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -293,10 +330,10 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-purple-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                 >
                   <Edit2 className="w-3 h-3" />
-                  <span>{isHost ? 'Changer mon nom d’hôte' : 'Changer mon pseudo'}</span>
+                  <span>{isHost ? t('change_host_name', language) : t('change_player_name', language)}</span>
                 </button>
                 <span className="text-[10px] text-white/50 hidden sm:inline">
-                  {isHost ? 'Tu es l’hôte 👑' : 'En attente de l’hôte...'}
+                  {isHost ? t('you_are_the_host', language) : t('waiting_for_host', language)}
                 </span>
               </div>
             </div>
@@ -319,7 +356,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                         ? 'bg-purple-500/20 border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] ring-1 ring-purple-400/40 cursor-pointer hover:bg-purple-500/30'
                         : 'bg-white/5 border-white/10'
                     }`}
-                    title={isMe ? 'Clique pour changer ton pseudo et avatar' : undefined}
+                    title={isMe ? (isHost ? t('change_host_name', language) : t('change_player_name', language)) : undefined}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-lg w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center border border-white/15 shrink-0">
@@ -328,14 +365,14 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1">
                           <span className="font-bold text-xs text-white truncate max-w-[120px] sm:max-w-[150px]">
-                            {player.isHost && player.name && player.name !== 'Hôte' ? `${player.name} (Hôte)` : player.name}
+                            {player.isHost && player.name && player.name !== 'Hôte' && player.name !== 'Host' ? `${player.name} (${t('host', language)})` : player.name}
                           </span>
                           {player.isHost && (
-                            <Crown className="w-3 h-3 text-amber-400 shrink-0" title="Hôte" />
+                            <Crown className="w-3 h-3 text-amber-400 shrink-0" title={t('host', language)} />
                           )}
                         </div>
                         <span className="text-[9px] text-white/50 flex items-center gap-1">
-                          {isMe ? 'Toi (Modifier ✎)' : 'Prêt'}
+                          {isMe ? t('you_edit', language) : t('ready', language)}
                         </span>
                       </div>
                     </div>
@@ -351,7 +388,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/5 border border-white/10">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-white/70">
               <Sparkles className="w-3 h-3 text-yellow-400 shrink-0" />
-              <span className="hidden sm:inline">Réactions :</span>
+              <span className="hidden sm:inline">{t('reactions_label', language)}</span>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -370,11 +407,32 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             </div>
           </div>
 
-          {/* Launch Game Action Button */}
+          {/* Launch Game Action Button / Error Retry Button */}
           <div>
             {errorMessage ? (
-              <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center gap-2 text-rose-200 text-xs font-bold text-center">
-                <span>⚠️ {errorMessage}</span>
+              <div className="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-center">
+                <div className="flex items-center justify-center gap-2 text-rose-200 text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+                {isHost ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick();
+                      onRetryGeneration?.();
+                    }}
+                    id="btn-retry-multiplayer-generation"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:from-rose-500 hover:via-purple-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer shadow-[0_0_20px_rgba(225,29,72,0.3)]"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>{t('retry_ai_generation', language)}</span>
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-rose-300/80">
+                    {t('waiting_for_host', language)}
+                  </p>
+                )}
               </div>
             ) : isHost ? (
               <button
@@ -395,19 +453,19 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 {isReadyToPlay ? (
                   <>
                     <Play className="w-4 h-4 fill-current text-white" />
-                    <span>Lancer la Partie ({playersList.length} joueur{playersList.length > 1 ? 's' : ''})</span>
+                    <span>{t('start_game_players', language)} ({playersList.length} {playersList.length > 1 ? t('players', language).toLowerCase() : t('player', language).toLowerCase()})</span>
                   </>
                 ) : (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-purple-300" />
-                    <span>Chargement des questions... ({playersList.length} en attente)</span>
+                    <span>{t('loading_questions_waiting', language).replace('%s', String(playersList.length))}</span>
                   </>
                 )}
               </button>
             ) : (
               <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-center justify-center gap-2 text-purple-200 text-xs font-bold">
                 <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-                <span>En attente du lancement par l’hôte ({roomState.players?.[roomState.hostId]?.name || 'Hôte'})...</span>
+                <span>{t('waiting_host_to_launch', language).replace('%s', roomState.players?.[roomState.hostId]?.name || t('host', language))}</span>
               </div>
             )}
           </div>
@@ -439,10 +497,10 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white">
-                      {isHost ? 'Modifier le nom d’hôte' : 'Modifier mon profil'}
+                      {isHost ? t('edit_host_name', language) : t('edit_profile', language)}
                     </h3>
                     <p className="text-[11px] text-white/60">
-                      Visible par tous les joueurs dans le salon
+                      {t('visible_by_all_players', language)}
                     </p>
                   </div>
                 </div>
@@ -457,7 +515,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
               <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-white/80">Choisis ton avatar :</label>
+                  <label className="text-xs font-bold text-white/80">{t('choose_avatar_label', language)}</label>
                   <div className="grid grid-cols-8 gap-1.5 p-2 rounded-2xl bg-white/5 border border-white/10">
                     {AVATAR_CHOICES.map((av) => (
                       <button
@@ -481,7 +539,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-white/80">
-                    {isHost ? 'Nom d’hôte :' : 'Ton pseudo :'}
+                    {isHost ? t('host_name_input_label', language) : t('your_nickname_input_label', language)}
                   </label>
                   <input
                     type="text"
@@ -500,14 +558,14 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                     onClick={() => setIsEditingProfile(false)}
                     className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 text-xs font-bold transition-all cursor-pointer"
                   >
-                    Annuler
+                    {t('cancel', language)}
                   </button>
                   <button
                     type="submit"
                     disabled={!editName.trim()}
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold shadow-md cursor-pointer transition-all transform active:scale-95 disabled:opacity-50"
                   >
-                    Enregistrer
+                    {t('save', language)}
                   </button>
                 </div>
               </form>

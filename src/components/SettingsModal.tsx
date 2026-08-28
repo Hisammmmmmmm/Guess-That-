@@ -35,10 +35,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const difficulties: { id: GameDifficulty; label: string; desc: string; time: number }[] = [
-    { id: 'easy', label: t('easy', settings.language), desc: 'Indices clairs & temps généreux (25s)', time: 25 },
-    { id: 'medium', label: t('medium', settings.language), desc: 'Équilibré & immersif (15s)', time: 15 },
-    { id: 'hard', label: t('hard', settings.language), desc: 'Chrono rapide (10s) & défi soutenu', time: 10 },
-    { id: 'expert', label: t('expert', settings.language), desc: 'Chrono éclair (8s) pour les vrais pros', time: 8 },
+    { id: 'easy', label: t('easy', settings.language), desc: t('diff_desc_easy_time', settings.language), time: 25 },
+    { id: 'medium', label: t('medium', settings.language), desc: t('diff_desc_medium_time', settings.language), time: 15 },
+    { id: 'hard', label: t('hard', settings.language), desc: t('diff_desc_hard_time', settings.language), time: 10 },
+    { id: 'expert', label: t('expert', settings.language), desc: t('diff_desc_expert_time', settings.language), time: 8 },
   ];
 
   const handleDifficultyChange = (diff: GameDifficulty, time: number) => {
@@ -112,10 +112,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               <div>
                 <h3 className="text-xl font-extrabold text-white font-heading">
-                  Paramètres & Personnalisation
+                  {t('settings_customization', settings.language)}
                 </h3>
                 <p className="text-xs text-white/60">
-                  Règle le mode de jeu, la difficulté, le volume et les options.
+                  {t('settings_desc', settings.language)}
                 </p>
               </div>
             </div>
@@ -136,14 +136,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm font-bold text-white">
               <Zap className="w-4 h-4 text-purple-400" />
-              <span>Mode de Jeu</span>
+              <span>{t('game_mode_label', settings.language)}</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
-                { id: 'quiz', label: 'Quiz Classique', desc: 'Questions, indices & visuels équilibrés' },
-                { id: 'music_blind_test', label: 'Blind Test Musical', desc: 'Reconnaissance audio & indices sonores' },
-                { id: 'visual_blind_test', label: 'Blind Test Visuel', desc: 'Double image HD nette & reconnaissance instantanée' },
+                { id: 'quiz', label: t('quiz', settings.language), desc: t('mode_quiz_desc', settings.language) },
+                { id: 'music_blind_test', label: t('music_blind_test', settings.language), desc: t('mode_music_desc', settings.language) },
+                { id: 'visual_blind_test', label: t('visual_blind_test', settings.language), desc: t('mode_visual_desc', settings.language) },
               ].map((m) => {
                 const isSelected = settings.gameMode === m.id;
                 return (
@@ -200,7 +200,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm font-bold text-white">
               <Clock className="w-4 h-4 text-purple-400" />
-              <span>Chrono par Question</span>
+              <span>{t('timer_per_question', settings.language)}</span>
             </div>
             <div className="flex items-center gap-2">
               {[8, 10, 15, 20, 25, 30].map((seconds) => {
@@ -230,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
                 <Volume2 className="w-4 h-4 text-emerald-400" />
-                <span>Gestion des Volumes Sonores</span>
+                <span>{t('sound_volume_management', settings.language)}</span>
               </div>
             </div>
 
@@ -255,7 +255,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/5 border border-white/10">
               <div className="flex items-center justify-between text-xs text-white/80 font-semibold">
                 <span className="flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-yellow-400" /> Effets Sonores (Clics & Fanfares)
+                  <Zap className="w-3.5 h-3.5 text-yellow-400" /> {t('sound_effects_desc', settings.language)}
                 </span>
                 <span className="font-mono-tech text-yellow-400 font-bold">{Math.round(settings.sfxVolume * 100)}%</span>
               </div>
@@ -274,7 +274,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/5 border border-white/10">
               <div className="flex items-center justify-between text-xs text-white/80 font-semibold">
                 <span className="flex items-center gap-1.5">
-                  <Music className="w-3.5 h-3.5 text-pink-400" /> Musique & Ambiances Immersives
+                  <Music className="w-3.5 h-3.5 text-pink-400" /> {t('music_ambience_desc', settings.language)}
                 </span>
                 <span className="font-mono-tech text-pink-400 font-bold">{Math.round(settings.musicVolume * 100)}%</span>
               </div>
@@ -296,8 +296,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center gap-3">
                 <Mic className="w-5 h-5 text-pink-400" />
                 <div>
-                  <p className="text-xs font-bold text-white">Synthèse vocale des indices</p>
-                  <p className="text-[10px] text-white/50">Lecture audio de l'indice par voix IA</p>
+                  <p className="text-xs font-bold text-white">{t('speech_clues_title', settings.language)}</p>
+                  <p className="text-[10px] text-white/50">{t('speech_clues_desc', settings.language)}</p>
                 </div>
               </div>
               <button
@@ -329,7 +329,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="px-7 py-3 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all cursor-pointer flex items-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.5)] transform active:scale-95"
             >
               <Check className="w-4 h-4" />
-              <span>Valider & Reprendre</span>
+              <span>{t('save_and_resume', settings.language)}</span>
             </button>
           </div>
         </motion.div>

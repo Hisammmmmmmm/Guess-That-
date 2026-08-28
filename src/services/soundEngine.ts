@@ -798,7 +798,12 @@ class SoundEngine {
 
   public async startMenuMusic() {
     this.initContext();
-    if (!this.ctx || !this.musicGain || this.isMusicMuted) return;
+    if (!this.ctx || !this.musicGain || this.isMusicMuted) return false;
+
+    // If menu music is already playing (custom buffer or synthetic ambience), keep playing seamlessly
+    if (this.customMusicSource || (this.currentAmbienceType === 'retro80s' && this.ambienceNodes)) {
+      return true;
+    }
 
     // Check if custom menu.mp3 exists
     const paths = ['/sounds/menu.mp3', '/menu.mp3'];

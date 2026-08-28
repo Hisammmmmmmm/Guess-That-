@@ -55,22 +55,22 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
   if (accuracyPct >= 90) {
     rank = 'S';
-    rankTitle = 'Légendaire ! Maître Absolu du Sujet';
+    rankTitle = t('rank_s_title', language);
     rankColor = 'from-yellow-300 via-amber-400 to-pink-500';
     rankBadgeBg = 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50';
   } else if (accuracyPct >= 75) {
     rank = 'A';
-    rankTitle = 'Excellent ! Véritable Connaisseur';
+    rankTitle = t('rank_a_title', language);
     rankColor = 'from-emerald-400 to-teal-500';
     rankBadgeBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
   } else if (accuracyPct >= 50) {
     rank = 'B';
-    rankTitle = 'Bravo ! Belle performance';
+    rankTitle = t('rank_b_title', language);
     rankColor = 'from-blue-400 to-indigo-500';
     rankBadgeBg = 'bg-blue-500/20 text-blue-300 border-blue-500/40';
   } else {
     rank = 'C';
-    rankTitle = 'Bel essai ! Réessaie pour battre ton record';
+    rankTitle = t('rank_c_title', language);
     rankColor = 'from-purple-400 to-slate-400';
     rankBadgeBg = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
   }
@@ -87,7 +87,12 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
   const handleShare = () => {
     onPlayClickSound?.();
-    const text = `🎯 J'ai obtenu le Rang ${rank} sur le Blind Test "${quizData.themeTitle}" avec un score de ${stats.score} pts (${correct}/${total} bonnes réponses) ! Peux-tu faire mieux ?`;
+    const text = t('share_result_text', language)
+      .replace('%s', rank)
+      .replace('%s', quizData.themeTitle || quizData.topic)
+      .replace('%s', stats.score.toLocaleString())
+      .replace('%s', correct.toString())
+      .replace('%s', total.toString());
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -116,13 +121,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
           <>
             <div>
               <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
-                Fin du Diaporama
+                {t('end_of_slideshow', language)}
               </span>
               <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-4">
-                Merci pour votre attention !
+                {t('thank_you_attention', language)}
               </h2>
               <p className="text-sm text-white/60 mt-3 max-w-md mx-auto">
-                La présentation sur le thème <span className="font-bold text-white/90">{quizData.themeTitle}</span> est maintenant terminée.
+                {t('presentation_ended', language).replace('%s', quizData.themeTitle || quizData.topic)}
               </p>
             </div>
           </>
@@ -138,7 +143,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                     {rank}
                   </span>
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/50 -mt-1">
-                    RANG
+                    {t('rank_label', language)}
                   </span>
                 </div>
               </div>
@@ -149,7 +154,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                 {rankTitle}
               </span>
               <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-3">
-                Score Final : <span className="text-yellow-400">{stats.score.toLocaleString()} pts</span>
+                {t('final_score', language)} <span className="text-yellow-400">{stats.score.toLocaleString()} pts</span>
               </h2>
               <p className="text-xs sm:text-sm text-white/60 mt-1">
                 Blind Test : {quizData.themeTitle}
@@ -161,19 +166,19 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-1" />
                 <span className="text-xl font-black text-white">{correct} / {total}</span>
-                <span className="text-[11px] text-white/60 font-semibold">Bonnes réponses</span>
+                <span className="text-[11px] text-white/60 font-semibold">{t('correct_answers', language)}</span>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
                 <Award className="w-5 h-5 text-purple-400 mb-1" />
                 <span className="text-xl font-black text-white">{accuracyPct}%</span>
-                <span className="text-[11px] text-white/60 font-semibold">Précision globale</span>
+                <span className="text-[11px] text-white/60 font-semibold">{t('overall_accuracy', language)}</span>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
                 <Flame className="w-5 h-5 text-orange-400 mb-1" />
                 <span className="text-xl font-black text-white">{stats.maxStreak} max</span>
-                <span className="text-[11px] text-white/60 font-semibold">Meilleure série</span>
+                <span className="text-[11px] text-white/60 font-semibold">{t('max_streak', language)}</span>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
@@ -181,7 +186,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                 <span className="text-xl font-black text-white">
                   {Math.round(stats.totalTimeSpent / Math.max(1, stats.answers.length))}s
                 </span>
-                <span className="text-[11px] text-white/60 font-semibold">Temps moyen / Q</span>
+                <span className="text-[11px] text-white/60 font-semibold">{t('avg_time_per_q', language)}</span>
               </div>
             </div>
           </>
@@ -198,7 +203,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(168,85,247,0.5)] cursor-pointer transform active:scale-95 hover:scale-[1.02]"
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Rejouer</span>
+            <span>{t('replay', language)}</span>
           </button>
 
           <button
@@ -210,7 +215,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-95 hover:scale-[1.02] backdrop-blur-md"
           >
             <Sparkles className="w-4 h-4 text-yellow-400" />
-            <span>Autre Thème</span>
+            <span>{t('other_theme', language)}</span>
           </button>
 
           {gameStyle !== 'slideshow' && (
@@ -220,7 +225,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               className="w-full sm:w-auto px-5 py-3 rounded-2xl font-bold text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
             >
               <Share2 className="w-4 h-4 text-purple-400" />
-              <span>{copied ? 'Score Copié dans le Presse-papier !' : 'Partager mon Résultat'}</span>
+              <span>{copied ? t('score_copied', language) : t('share_result', language)}</span>
             </button>
           )}
         </div>
@@ -230,9 +235,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-2xl font-extrabold text-white font-heading">
-            Récapitulatif des 15 Énigmes & Anecdotes
+            {t('recap_questions_trivia', language)}
           </h3>
-          <span className="text-xs font-semibold text-white/50">Clique pour voir les détails</span>
+          <span className="text-xs font-semibold text-white/50">{t('click_to_view_details', language)}</span>
         </div>
 
         <div className="flex flex-col gap-2.5">
@@ -274,7 +279,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                         <span className="font-bold text-emerald-400">{q.correctAnswer}</span>
                         {!isCorrect && playerAnswer?.selectedOption && (
                           <span className="text-red-400 line-through text-[11px] truncate">
-                            (Ton choix: {playerAnswer.selectedOption})
+                            ({t('your_choice', language)} {playerAnswer.selectedOption})
                           </span>
                         )}
                       </div>
@@ -315,14 +320,14 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                       <div className="flex flex-col gap-2">
                         <div>
                           <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">
-                            Indice de l'énigme
+                            {t('clue_label', language)}
                           </span>
                           <p className="text-xs text-white/80 mt-0.5">{q.clue}</p>
                         </div>
 
                         <div>
                           <span className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
-                            Le saviez-vous ?
+                            {t('fun_fact', language)}
                           </span>
                           <p className="text-xs text-white/80 mt-0.5 leading-relaxed">
                             {q.trivia}

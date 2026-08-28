@@ -92,7 +92,7 @@ export default function App() {
   const timerRef = useRef<number | null>(null);
   const lastTickSecondRef = useRef<number>(-1);
 
-  // Settings State - Default speechCluesEnabled to true as requested
+  // Settings State - Default speechCluesEnabled to false as requested (TTS disabled by default)
   const [settings, setSettings] = useState<GameSettings>({
     difficulty: 'medium',
     gameMode: 'quiz',
@@ -105,7 +105,7 @@ export default function App() {
     soundEffectsEnabled: true,
     musicEnabled: true,
     progressiveBlur: true,
-    speechCluesEnabled: true,
+    speechCluesEnabled: false,
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -483,10 +483,8 @@ export default function App() {
       if (newSettings.sfxVolume !== undefined) {
         soundEngine.setSfxVolume(newSettings.sfxVolume);
       }
-      if (newSettings.musicVolume !== undefined || newSettings.gameMode !== undefined) {
-        const mv = newSettings.musicVolume !== undefined ? newSettings.musicVolume : updated.musicVolume;
-        const gm = newSettings.gameMode !== undefined ? newSettings.gameMode : updated.gameMode;
-        soundEngine.setMusicVolume(gm === 'visual_blind_test' ? mv * 0.1 : mv);
+      if (newSettings.musicVolume !== undefined) {
+        soundEngine.setMusicVolume(newSettings.musicVolume);
       }
       if (newSettings.soundEffectsEnabled !== undefined) {
         soundEngine.setSfxMuted(!newSettings.soundEffectsEnabled);
@@ -542,7 +540,9 @@ export default function App() {
     gameStyle: GameStyle
   ) => {
     setSettings((prev) => ({ ...prev, difficulty, gameMode, gameStyle }));
-    generateQuizFromTopic(theme.suggestedPrompt || theme.title, theme, difficulty, gameMode, gameStyle);
+    const localizedTitle = t(`preset_${theme.id}_title`, settings.language);
+    const titleToUse = localizedTitle && !localizedTitle.startsWith('preset_') ? localizedTitle : theme.title;
+    generateQuizFromTopic(titleToUse, theme, difficulty, gameMode, gameStyle);
   };
 
   // --- AI GENERATE QUIZ FOR CUSTOM TOPIC ---
@@ -564,9 +564,9 @@ export default function App() {
 
     // If competitive room mode: Immediately create and display the room lobby!
     // All questions are generated dynamically by AI as requested, while friends can already scan and join
-    if (finalStyle === 'competitive_room') {
+    if (finalStyle === 'competitive_room' && screen !== 'room_lobby' && !multiplayerService.getCurrentRoomCode()) {
       multiplayerService.createRoom({
-        hostName: profileName || 'Hôte 👑',
+        hostName: profileName || `${t('host', settings.language)} 👑`,
         avatar: profileAvatar || '👑',
         quizData: {
           topic,
@@ -587,17 +587,17 @@ export default function App() {
     }
 
     const modeLabels: Record<string, string> = {
-      quiz: 'Mode Quiz',
-      music_blind_test: 'Blind Test Musical',
-      visual_blind_test: 'Blind Test Visuel',
+      quiz: t('mode_quiz_title', settings.language),
+      music_blind_test: t('mode_music_title', settings.language),
+      visual_blind_test: t('mode_visual_title', settings.language),
     };
 
     const steps = [
-      `Analyse du thème "${topic}"...`,
-      `Génération de 15 questions (${modeLabels[finalMode] || 'Quiz'}, Niveau: ${finalDifficulty})...`,
-      'Recherche des images officielles sur Wikipédia...',
-      'Synthèse des motifs sonores et indices vocaux...',
-      'Préparation de l\'arène...',
+      t('step_analyzing_topic', settings.language).replace('...', '') + ` "${topic}"...`,
+      t('step_generating_questions', settings.language),
+      t('step_searching_images', settings.language),
+      t('step_synthesizing_audio', settings.language),
+      t('step_preparing_arena', settings.language),
     ];
 
     let stepIdx = 0;
@@ -642,7 +642,7 @@ export default function App() {
         throw new Error((generatedData as any)?.error || `Erreur serveur (${response.status}) lors de la génération du quiz.`);
       }
 
-      setGenerationStep('Préchargement des médias...');
+      setGenerationStep(t('step_preloading_media', settings.language));
 
       // Preload primary and secondary image for the first question with a safety timeout
       const firstQ = generatedData.questions[0];
@@ -705,7 +705,17 @@ export default function App() {
         });
       }
 
-      const finalPreparedData = prepareQuizData(fallbackTheme ? { ...generatedData, ...fallbackTheme } : generatedData);
+      const finalPreparedData = prepareQuizData(
+        fallbackTheme
+          ? {
+              ...fallbackTheme,
+              ...generatedData,
+              themeTitle: generatedData.themeTitle || t(`preset_${fallbackTheme.id}_title`, settings.language) || fallbackTheme.title,
+              themeDescription: generatedData.themeDescription || t(`preset_${fallbackTheme.id}_desc`, settings.language) || fallbackTheme.description,
+              questions: generatedData.questions,
+            }
+          : generatedData
+      );
       setPendingQuizData(finalPreparedData);
       setQuizData(finalPreparedData);
       setIsGenerating(false);
@@ -818,8 +828,8 @@ export default function App() {
     }
 
     let lastTick = Date.now();
-    // delay logic handled by just not ticking until delay passes
-    let delayRemainingMs = settings.gameMode === 'music_blind_test' ? 10000 : 0;
+    // Start countdown immediately without delay
+    let delayRemainingMs = 0;
 
     timerRef.current = window.setInterval(() => {
       const now = Date.now();
@@ -868,7 +878,8 @@ export default function App() {
             ttsAudioRef.current.pause();
             ttsAudioRef.current = null;
           }
-          fetch(`/api/tts?text=${encodeURIComponent(currentQuestion.question)}`)
+          const currentLangCode = roomState?.language || settings.language || 'fr';
+          fetch(`/api/tts?text=${encodeURIComponent(currentQuestion.question)}&lang=${encodeURIComponent(currentLangCode)}`)
             .then(async (res) => {
               if (!res.ok) return null;
               return res.json().catch(() => null);
@@ -894,16 +905,13 @@ export default function App() {
     }
   }, [screen, currentQuestionIndex, currentQuestion?.id, isAnswered, settings.speechCluesEnabled, settings.gameMode]);
 
-  // Volume synchronization with game modes (e.g. 10% music volume in visual blind test for subtle ambience)
+  // Volume synchronization
   useEffect(() => {
     if (!settings.musicEnabled) {
       soundEngine.setMusicMuted(true);
     } else {
       soundEngine.setMusicMuted(false);
-      const effectiveVol = settings.gameMode === 'visual_blind_test' 
-        ? settings.musicVolume * 0.1 
-        : settings.musicVolume;
-      soundEngine.setMusicVolume(effectiveVol);
+      soundEngine.setMusicVolume(settings.musicVolume);
     }
   }, [settings.gameMode, settings.musicVolume, settings.musicEnabled, screen]);
 
@@ -1341,12 +1349,12 @@ export default function App() {
               />
               {errorMessage && (
                 <div className="mt-6 p-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium text-center">
-                  <span className="font-bold">Erreur :</span> {errorMessage}
+                  <span className="font-bold">{t('error_label', settings.language)}</span> {errorMessage}
                   <button 
                     onClick={() => setErrorMessage(null)}
                     className="ml-3 underline opacity-80 hover:opacity-100"
                   >
-                    Fermer
+                    {t('close', settings.language)}
                   </button>
                 </div>
               )}
@@ -1420,6 +1428,7 @@ export default function App() {
                 onStartGame={() => currentRoomCode && multiplayerService.startGame(currentRoomCode)}
                 onSendReaction={(emoji) => currentRoomCode && multiplayerService.sendReaction(currentRoomCode, emoji)}
                 onLeaveRoom={handleExitToMenu}
+                onRetryGeneration={() => generateQuizFromTopic(roomState.topic, undefined, roomState.difficulty, roomState.gameMode as any, 'competitive_room')}
                 floatingReactions={floatingReactions}
               />
             </motion.div>
@@ -1450,7 +1459,7 @@ export default function App() {
 
               <div className="flex flex-col gap-1">
                 <h3 className="text-2xl font-black text-white font-heading">
-                  Génération IA en cours
+                  {t('ai_generation_in_progress', settings.language)}
                 </h3>
               </div>
 
@@ -1460,10 +1469,10 @@ export default function App() {
                   <Coffee className="w-5 h-5 text-amber-300" />
                 </div>
                 <p className="text-sm font-bold text-white">
-                  Prenez un café ! ☕
+                  {t('take_a_coffee', settings.language)}
                 </p>
                 <p className="leading-relaxed text-white/60">
-                  La création sur mesure des 15 énigmes avec recherches d'images et musiques peut prendre de <strong className="text-purple-300">3 à 10 minutes</strong>. Vous pouvez changer d'onglet en attendant, on s'occupe de tout.
+                  {t('coffee_break_desc', settings.language)}
                 </p>
               </div>
 
@@ -1542,7 +1551,7 @@ export default function App() {
                     <div className="hidden md:flex md:col-span-3 flex-col gap-2 min-h-0 justify-between">
                       {/* Cadre Question # */}
                       <div className="bg-black/30 backdrop-blur-md px-3 py-2 rounded-xl border border-white/10 shadow-md flex flex-row items-center justify-between shrink-0">
-                        <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold">Question</span>
+                        <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold">{t('question', roomState?.language || settings.language)}</span>
                         <span className="text-base font-black text-white leading-none font-heading">
                           {(currentQuestionIndex + 1).toString().padStart(2, '0')}{' '}
                           <span className="text-white/35 text-xs font-normal">/ {quizData.questions.length.toString().padStart(2, '0')}</span>
@@ -1559,16 +1568,16 @@ export default function App() {
                         />
                         {settings.gameStyle === 'competitive' ? (
                           <div className="flex flex-col text-right">
-                            <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">Gain potentiel</span>
+                            <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">{t('potential_gain', roomState?.language || settings.language)}</span>
                             <span className="text-sm font-black text-yellow-400 font-mono-tech drop-shadow-md">
                               +{Math.round(100 + Math.max(0, timeLeft) * 10)} pts
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col text-right">
-                            <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">Mode</span>
+                            <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">{t('mode', roomState?.language || settings.language)}</span>
                             <span className="text-sm font-black text-purple-400 font-heading drop-shadow-md">
-                              {settings.gameStyle === 'competitive_room' ? 'Salon Multijoueur' : 'Diapositif'}
+                              {settings.gameStyle === 'competitive_room' ? t('comp_room', roomState?.language || settings.language) : t('slideshow', roomState?.language || settings.language)}
                             </span>
                           </div>
                         )}
@@ -1606,7 +1615,7 @@ export default function App() {
                                 <div className="absolute inset-0 rounded-full border border-white/30 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
                                 <div className="absolute inset-0 rounded-full border border-white/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite_1s]" />
                               </div>
-                              <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">Écoute l'extrait...</span>
+                              <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">{t('listen_clue', roomState?.language || settings.language)}</span>
                             </div>
                           </div>
 
@@ -1656,12 +1665,12 @@ export default function App() {
                         </div>
                       ) : (
                         <VisualClue
-                        language={roomState?.language || settings.language}
-                          imageUrl={currentQuestion.imageUrl}
-                          secondaryImageUrl={currentQuestion.secondaryImageUrl}
-                          secondaryImageSource={currentQuestion.secondaryImageSource}
-                          imagePrompt={currentQuestion.imagePrompt}
-                          category={currentQuestion.category}
+                          language={roomState?.language || settings.language}
+                          imageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
+                          secondaryImageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
+                          secondaryImageSource={(roomState?.gameMode || settings.gameMode) === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
+                          imagePrompt={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
+                          category={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
                           clue=""
                           isAnswered={isAnswered}
                           questionIndex={currentQuestionIndex}
@@ -1684,7 +1693,7 @@ export default function App() {
                               <Flame className="w-2.5 h-2.5" /> x{stats.streak >= 5 ? '3.0' : '2.0'}
                             </div>
                           )}
-                          <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold">Score</span>
+                          <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold">{t('score', roomState?.language || settings.language)}</span>
                           <span className="text-base font-black text-yellow-400 font-heading">
                             {stats.score.toLocaleString()}
                           </span>
@@ -1694,14 +1703,14 @@ export default function App() {
                       {/* Cadre Catégorie */}
                       {settings.gameMode !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/10 shadow-md text-center flex flex-row items-center justify-between shrink-0">
-                          <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">Catégorie</span>
+                          <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">{t('category', roomState?.language || settings.language)}</span>
                           <span className="text-xs font-bold text-white capitalize truncate max-w-[120px]">{currentQuestion.category}</span>
                         </div>
                       )}
 
                       {/* Cadre Indice Texte */}
                       <div className="bg-black/30 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-md text-center flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden">
-                        <span className="text-[8px] uppercase text-white/50 font-bold mb-0.5 block shrink-0">Indice</span>
+                        <span className="text-[8px] uppercase text-white/50 font-bold mb-0.5 block shrink-0">{t('clue', roomState?.language || settings.language)}</span>
                         <span className="text-xs text-white/90 italic leading-snug overflow-y-auto w-full custom-scrollbar pr-1">
                           « {currentQuestion.clue} »
                         </span>
@@ -1859,7 +1868,7 @@ export default function App() {
       {/* Subtle Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
       {screen !== 'playing' && (
         <footer className="relative z-10 py-3 text-center text-xs text-white/40 border-t border-white/10 backdrop-blur-md">
-          <span>Blind Test Ultimate • 15 Énigmes Visuelles & Audio IA • Web Audio API</span>
+          <span>{t('footer_text', settings.language)}</span>
         </footer>
       )}
     </div>

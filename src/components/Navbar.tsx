@@ -19,6 +19,7 @@ import {
 import { GameSettings, QuizData, GameScreen, RoomState } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { t, languages } from '../i18n/translations';
+import { FlagIcon } from './FlagIcon';
 
 interface NavbarProps {
   currentScreen: GameScreen;
@@ -88,7 +89,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center gap-1.5 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md text-[9px] sm:text-xs">
                 {roomLang && (
                   <>
-                    <span className="font-semibold text-white" title={roomLang.name}>{roomLang.flag}</span>
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-purple-500/20 border border-purple-400/30 text-purple-200" title={`${t('room_language', settings.language)}: ${roomLang.name}`}>
+                      <span className="text-[9px] uppercase tracking-wider text-purple-300 font-bold hidden sm:inline">{t('room_language', settings.language)}:</span>
+                      <FlagIcon code={roomLang.code} className="w-4 h-3 rounded-xs" />
+                      <span className="font-bold text-white text-[10px]">{roomLang.name}</span>
+                    </div>
                     <span className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
                   </>
                 )}
@@ -133,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Guess<span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">That!</span>
                 </span>
                 <span className="text-[10px] text-white/50 -mt-1 font-semibold hidden sm:inline">
-                  15 Questions & Visuels IA
+                  {t('app_subtitle', settings.language)}
                 </span>
               </div>
             </div>
@@ -162,13 +167,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
               className="p-2.5 px-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-bold backdrop-blur-md shadow-md bg-white/5 border-white/10 text-white/90 hover:bg-white/10 hover:text-white"
               title={t('language', settings.language)}
+              id="btn-language-selector"
             >
-              <Globe className="w-4 h-4 text-blue-400" />
-              <span className="hidden lg:inline text-[11px]">{currentLang.flag}</span>
+              <FlagIcon code={currentLang.code} className="w-5 h-3.5 rounded-xs" />
+              <span className="hidden sm:inline text-xs font-bold uppercase text-white/80">{currentLang.code}</span>
             </button>
             
             {isLangMenuOpen && (
-              <div className="absolute top-full mt-2 right-0 bg-[#0F0A1F] border border-white/10 rounded-2xl shadow-xl overflow-hidden py-1 min-w-[120px]">
+              <div className="absolute top-full mt-2 right-0 bg-[#0F0A1F] border border-white/10 rounded-2xl shadow-xl overflow-hidden py-1 min-w-[140px] z-50">
                 {languages.map(lang => (
                   <button
                     key={lang.code}
@@ -176,9 +182,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onUpdateSettings({ language: lang.code });
                       setIsLangMenuOpen(false);
                     }}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-white/10 flex items-center gap-2 ${settings.language === lang.code ? 'bg-white/5 text-white' : 'text-white/70'}`}
+                    className={`w-full text-left px-3.5 py-2 text-xs hover:bg-white/10 flex items-center gap-2.5 transition-colors ${settings.language === lang.code ? 'bg-purple-500/20 text-purple-300 font-bold' : 'text-white/80'}`}
                   >
-                    <span>{lang.flag}</span>
+                    <FlagIcon code={lang.code} className="w-4 h-3 rounded-xs" />
                     <span>{lang.name}</span>
                   </button>
                 ))}

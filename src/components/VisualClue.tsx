@@ -65,7 +65,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
         {/* Top Header Badge */}
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 pointer-events-none">
           <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full bg-black/70 text-white/90 border border-white/20 backdrop-blur-md shadow-sm">
-            Indice #{questionIndex + 1}/{totalQuestions}
+            {t('clue', language)} #{questionIndex + 1}/{totalQuestions}
           </span>
           {category && (
             <span
@@ -90,7 +90,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
             }}
             id="btn-fullscreen-clue"
             className="p-1.5 rounded-full bg-black/70 hover:bg-black/90 text-slate-200 hover:text-white border border-white/20 transition-all backdrop-blur-md shadow-md cursor-pointer"
-            title="Agrandir les 2 images"
+            title={t('zoom_images', language)}
           >
             <Maximize2 className="w-3 h-3" />
           </button>
@@ -110,7 +110,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
           <div className="relative w-full h-full overflow-hidden bg-black/50 rounded-lg flex items-center justify-center group/img1">
             <img
               src={imageUrl}
-              alt={imagePrompt || 'Indice visuel 1'}
+              alt={imagePrompt || `${t('visual_clue', language)} 1`}
               referrerPolicy="no-referrer"
               onLoad={() => setImg1Loaded(true)}
               onError={() => setImg1Error(true)}
@@ -120,7 +120,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
             />
             {hasTwoImages && (
               <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-black/75 text-white/90 border border-white/15 backdrop-blur-md pointer-events-none z-10">
-                Vue 1 • Web
+                {t('view_1', language)} • Web
               </span>
             )}
           </div>
@@ -130,7 +130,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
             <div className="relative w-full h-full overflow-hidden bg-black/50 rounded-lg flex items-center justify-center group/img2">
               <img
                 src={secondaryImageUrl}
-                alt={`${imagePrompt || 'Indice visuel'} (${secondaryImageSource})`}
+                alt={`${imagePrompt || t('visual_clue', language)} (${secondaryImageSource})`}
                 referrerPolicy="no-referrer"
                 onLoad={() => setImg2Loaded(true)}
                 onError={() => setImg2Error(true)}
@@ -139,7 +139,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                 }`}
               />
               <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-wider bg-black/75 text-purple-200 border border-purple-400/20 backdrop-blur-md pointer-events-none z-10">
-                Vue 2 • {secondaryImageSource}
+                {t('view_2', language)} • {secondaryImageSource}
               </span>
             </div>
           )}
@@ -173,7 +173,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
               <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
-                    Énigme #{questionIndex + 1}
+                    {t('riddle_label', language)} #{questionIndex + 1}
                   </span>
                   {hasTwoImages && (
                     <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/15">
@@ -183,7 +183,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                           activeZoomIndex === 'both' ? 'bg-purple-600 text-white shadow-sm' : 'text-white/60 hover:text-white'
                         }`}
                       >
-                        Les 2 Vues
+                        {t('both_views', language)}
                       </button>
                       <button
                         onClick={() => setActiveZoomIndex(0)}
@@ -191,7 +191,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                           activeZoomIndex === 0 ? 'bg-purple-600 text-white shadow-sm' : 'text-white/60 hover:text-white'
                         }`}
                       >
-                        Vue 1 (Web)
+                        {t('view_1', language)} (Web)
                       </button>
                       <button
                         onClick={() => setActiveZoomIndex(1)}
@@ -199,7 +199,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                           activeZoomIndex === 1 ? 'bg-purple-600 text-white shadow-sm' : 'text-white/60 hover:text-white'
                         }`}
                       >
-                        Vue 2 ({secondaryImageSource})
+                        {t('view_2', language)} ({secondaryImageSource})
                       </button>
                     </div>
                   )}
@@ -209,7 +209,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                   onClick={() => setIsFullscreen(false)}
                   className="px-3 py-1 text-xs font-bold rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer"
                 >
-                  Fermer
+                  {t('close', language)}
                 </button>
               </div>
 
@@ -224,7 +224,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                       className="w-full h-full object-contain"
                     />
                     <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-black/80 text-white border border-white/20">
-                      Vue 1 • Web
+                      {t('view_1', language)} • Web
                     </span>
                   </div>
                 )}
@@ -238,7 +238,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
                       className="w-full h-full object-contain"
                     />
                     <span className="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-950/80 text-purple-200 border border-purple-500/30">
-                      Vue 2 • {secondaryImageSource}
+                      {t('view_2', language)} • {secondaryImageSource}
                     </span>
                   </div>
                 )}

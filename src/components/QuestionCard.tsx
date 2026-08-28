@@ -153,7 +153,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                    Le savais-tu ?
+                    {t('fun_fact', language)}
                   </span>
                   {scoreEarned > 0 && (
                     <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-0.5">
@@ -175,7 +175,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 >
                   <Clock className="w-3.5 h-3.5 text-purple-300 animate-pulse shrink-0" />
                   <span>
-                    {isLastQuestion ? 'Résultats dans' : 'Question suivante dans'}{' '}
+                    {isLastQuestion ? t('results_in', language) : t('next_question_in', language)}{' '}
                     <strong className="text-white text-sm font-black font-heading ml-1">
                       {autoAdvanceCountdown !== null && autoAdvanceCountdown !== undefined && autoAdvanceCountdown > 0
                         ? `${autoAdvanceCountdown}s`
@@ -197,11 +197,11 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                   <span>
                     {isLastQuestion
                       ? autoAdvanceCountdown !== null && autoAdvanceCountdown !== undefined && autoAdvanceCountdown > 0
-                        ? `Résultats (${autoAdvanceCountdown}s)`
-                        : 'Résultats (Entrée)'
+                        ? t('results_countdown', language).replace('%s', autoAdvanceCountdown.toString())
+                        : t('results_enter', language)
                       : autoAdvanceCountdown !== null && autoAdvanceCountdown !== undefined && autoAdvanceCountdown > 0
-                      ? `Suivant (${autoAdvanceCountdown}s)`
-                      : 'Suivant (Entrée)'}
+                      ? t('next_countdown', language).replace('%s', autoAdvanceCountdown.toString())
+                      : t('next_enter', language)}
                   </span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>

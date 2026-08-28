@@ -5,7 +5,8 @@ import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { multiplayerService } from '../services/multiplayerService';
 
-import { t } from '../i18n/translations';
+import { t, languages } from '../i18n/translations';
+import { FlagIcon } from './FlagIcon';
 
 interface MultiplayerScoreboardProps {
   language?: string;
@@ -41,9 +42,15 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-extrabold text-white font-heading">{t('live_ranking', language)}</h3>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] text-white/50">{t('room', language)} : <span className="font-bold text-purple-300">{roomState.code}</span> ({playersList.length} j.)
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-[10px] text-white/50">{t('room', language)} : <span className="font-bold text-purple-300">{roomState.code}</span> ({playersList.length} {t('players_short', language)})
               </span>
+              {roomState.language && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-white/80" title={`${t('room_language', language)}: ${languages.find(l => l.code === roomState.language)?.name || roomState.language}`}>
+                  <FlagIcon code={roomState.language} className="w-3.5 h-2.5 rounded-xs" />
+                  <span className="font-bold uppercase text-[9px]">{roomState.language}</span>
+                </span>
+              )}
               <button
                 type="button"
                 id="btn-refresh-room-game"

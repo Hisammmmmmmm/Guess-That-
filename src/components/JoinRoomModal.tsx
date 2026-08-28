@@ -53,11 +53,11 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
     const cleanName = playerName.trim();
 
     if (!cleanCode) {
-      setLocalError('Veuillez renseigner le code du salon (ex: 8XK4P2).');
+      setLocalError(t('enter_room_code_error', language));
       return;
     }
     if (!cleanName) {
-      setLocalError('Veuillez entrer un nom de joueur.');
+      setLocalError(t('enter_player_name_error', language));
       return;
     }
 
@@ -97,7 +97,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
               <div>
                 <h3 className="text-xl font-extrabold text-white font-heading">{t('join_room', language)}</h3>
                 <p className="text-xs text-white/60">
-                  Affronte tes amis en direct sur le Blind Test !
+                  {t('join_modal_desc', language)}
                 </p>
               </div>
             </div>
@@ -124,7 +124,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
             {/* Room Code */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-white/80 uppercase tracking-wider">
-                Code du Salon (6 lettres/chiffres)
+                {t('room_code_label', language)}
               </label>
               <input
                 type="text"
@@ -140,7 +140,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
             {/* Player Name */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-white/80 uppercase tracking-wider">
-                Ton Pseudo (Nom de joueur)
+                {t('nickname_label', language)}
               </label>
               <input
                 type="text"
@@ -184,7 +184,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
               className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.5)] cursor-pointer transform active:scale-95 disabled:opacity-50 mt-2"
             >
               {isConnecting ? (
-                <span>Connexion au salon...</span>
+                <span>{t('connecting_room', language)}</span>
               ) : (
                 <>
                   <span>{t('join_game', language)}</span>

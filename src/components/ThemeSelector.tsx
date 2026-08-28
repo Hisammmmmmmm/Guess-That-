@@ -96,13 +96,25 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
     onGenerateCustom(clean, difficulty, selectedMode, selectedStyle);
   };
 
+  const getPresetTitle = (theme: QuizTheme) => {
+    const key = `preset_${theme.id}_title`;
+    const val = t(key, language);
+    return val !== key ? val : theme.title;
+  };
+
+  const getPresetTag = (theme: QuizTheme) => {
+    const key = `preset_${theme.id}_tag`;
+    const val = t(key, language);
+    return val !== key ? val : theme.tag;
+  };
+
   const gameModesList: { id: GameMode; title: string; subtitle: string; icon: React.ReactNode; badge: string; color: string }[] = [
     {
       id: 'quiz',
       title: t('mode_quiz_title', language),
       subtitle: t('mode_quiz_desc', language),
       icon: <HelpCircle className="w-6 h-6" />,
-      badge: 'Complet & Équilibré',
+      badge: t('badge_balanced', language),
       color: 'from-blue-600 to-indigo-600',
     },
     {
@@ -110,7 +122,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
       title: t('mode_music_title', language),
       subtitle: t('mode_music_desc', language),
       icon: <Headphones className="w-6 h-6" />,
-      badge: '100% Audio',
+      badge: t('badge_audio', language),
       color: 'from-fuchsia-600 to-pink-600',
     },
     {
@@ -118,7 +130,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
       title: t('mode_visual_title', language),
       subtitle: t('mode_visual_desc', language),
       icon: <Eye className="w-6 h-6" />,
-      badge: '100% Visuel',
+      badge: t('badge_visual', language),
       color: 'from-amber-500 to-orange-600',
     },
   ];
@@ -263,7 +275,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white">{t('already_have_code', language)}</span>
                         <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black uppercase">
-                          Multijoueur
+                          {t('badge_multi', language)}
                         </span>
                       </div>
                       <span className="text-[11px] text-purple-200/70">{t('join_friend_live', language)}</span>
@@ -299,7 +311,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
               >
                 <div className="text-center mb-2">
                   <h2 className="text-xl sm:text-2xl font-black text-white font-heading">{t('step2_title', language)}</h2>
-                  <p className="text-sm text-white/60 mt-1">Comment préfères-tu jouer ?</p>
+                  <p className="text-sm text-white/60 mt-1">{t('how_to_play', language)}</p>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-3xl">
@@ -308,21 +320,21 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                       id: 'competitive_solo',
                       label: t('comp_solo', language),
                       desc: t('comp_solo_desc', language),
-                      badge: 'Solo',
+                      badge: t('badge_solo', language),
                       icon: <Gamepad2 className="w-6 h-6 mb-1 text-purple-400" />
                     },
                     {
                       id: 'competitive_room',
                       label: t('comp_room', language),
                       desc: t('comp_room_desc', language),
-                      badge: 'Multijoueur',
+                      badge: t('badge_multi', language),
                       icon: <Users className="w-6 h-6 mb-1 text-pink-400" />
                     },
                     {
                       id: 'slideshow',
                       label: t('slideshow', language),
                       desc: t('slideshow_desc', language),
-                      badge: 'Détente',
+                      badge: t('badge_relaxed', language),
                       icon: <Tv className="w-6 h-6 mb-1 text-blue-400" />
                     },
                   ].map((style) => {
@@ -367,7 +379,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                       className="px-5 py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-xs font-bold text-white flex items-center gap-2 transition-all cursor-pointer backdrop-blur-md hover:border-pink-500/40"
                     >
                       <QrCode className="w-4 h-4 text-pink-400" />
-                      <span>Rejoindre un salon existant (avec Code / QR)</span>
+                      <span>{t('join_existing_room_btn', language)}</span>
                     </button>
                   </div>
                 )}
@@ -447,7 +459,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                         type="text"
                         value={customTopic}
                         onChange={(e) => setCustomTopic(e.target.value)}
-                        placeholder="Ex: Mangas 90s, Hip-Hop..."
+                        placeholder={t('custom_topic_placeholder', language)}
                         disabled={isGenerating}
                         className="w-full pl-9 pr-4 py-3 rounded-xl bg-black/40 border border-white/15 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm font-medium transition-all shadow-inner"
                       />
@@ -500,10 +512,10 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="text-[11px] font-bold text-white group-hover:text-purple-200 transition-colors truncate">
-                              {theme.title}
+                              {getPresetTitle(theme)}
                             </h4>
                             <p className="text-[9px] text-white/50 truncate">
-                              {theme.tag}
+                              {getPresetTag(theme)}
                             </p>
                           </div>
                         </button>

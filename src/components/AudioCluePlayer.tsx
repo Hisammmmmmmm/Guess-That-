@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Play, Pause, Disc, Sparkles, Mic, Square } from 'lucide-react';
 import { soundEngine } from '../services/soundEngine';
+import { ttsService } from '../services/ttsService';
 import YouTube, { YouTubePlayer } from 'react-youtube';
+import { t } from '../i18n/translations';
 
 interface AudioCluePlayerProps {
   audioNotes?: number[];
@@ -48,17 +50,9 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
       soundEngine.unlockAudio();
       soundEngine.playAudioClue(audioNotes);
 
-      // Voice synthesis of clue via Google TTS
+      // Voice synthesis of clue in selected language
       if (speechEnabled && clueText) {
-        fetch(`/api/tts?text=${encodeURIComponent(clueText)}&lang=${language}`)
-          .then((res) => (res.ok ? res.json().catch(() => null) : null))
-          .then((data) => {
-            if (data?.url) {
-              const audio = new Audio(data.url);
-              audio.play().catch((err) => console.warn('Audio play failed', err));
-            }
-          })
-          .catch((err) => console.error('TTS error', err));
+        ttsService.speak(clueText, language);
       }
 
       const duration = ((audioNotes?.length || 6) * 140) + 400;
@@ -71,9 +65,13 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
   // Stop playing when moving to next question
   useEffect(() => {
     setIsPlaying(false);
+    ttsService.stop();
     if (playerRef.current) {
       playerRef.current.pauseVideo();
     }
+    return () => {
+      ttsService.stop();
+    };
   }, [youtubeVideoId, clueText]);
 
   useEffect(() => {
@@ -116,7 +114,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
             backgroundColor: primaryColor,
             boxShadow: `0 0 ${isMusicMode ? '30px' : '15px'} ${primaryColor}70`,
           }}
-          title={isMusicMode ? "Écouter la musique" : "Écouter l'extrait sonore et l'indice vocal"}
+          title={isMusicMode ? t('listen_music', language) : t('listen_sound_voice_clue', language)}
         >
           {isMusicMode ? (
             <Disc className="w-6 h-6 sm:w-8 sm:h-8 animate-[spin_3s_linear_infinite]" />
@@ -130,7 +128,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
         <div>
           <div className={`flex items-center gap-1.5 ${isMusicMode ? 'justify-center mb-1' : ''}`}>
             <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-purple-300">
-              {isMusicMode ? 'Écoute attentive' : 'Indice Audio & Vocal'}
+              {isMusicMode ? t('listen_attentively', language) : t('audio_vocal_clue', language)}
             </span>
             {isPlaying && (
               <span className="flex h-1.5 w-1.5 relative">
@@ -140,7 +138,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
             )}
           </div>
           <p className="text-[10px] sm:text-xs text-white/60 line-clamp-1">
-            {isMusicMode ? 'Lecture de la musique...' : (isPlaying ? 'Lecture de l\'indice en cours...' : 'Lecture vocale automatique activée')}
+            {isMusicMode ? t('playing_music', language) : (isPlaying ? t('playing_clue', language) : t('auto_voice_enabled', language))}
           </p>
         </div>
       </div>
