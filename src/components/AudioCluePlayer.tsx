@@ -14,6 +14,7 @@ interface AudioCluePlayerProps {
   youtubeVideoId?: string;
   gameMode?: string;
   language?: string;
+  volume?: number;
 }
 
 export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
@@ -25,10 +26,21 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
   youtubeVideoId,
   gameMode,
   language = 'fr',
+  volume = 80,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeBar, setActiveBar] = useState(0);
   const playerRef = useRef<YouTubePlayer | null>(null);
+
+  useEffect(() => {
+    if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
+      try {
+        playerRef.current.setVolume(Math.min(100, Math.max(0, volume)));
+      } catch {
+        // ignore
+      }
+    }
+  }, [volume]);
 
   const toggleAudio = () => {
     if (isPlaying || isMusicMode) {
@@ -86,8 +98,8 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
 
   const onReady = (event: any) => {
     playerRef.current = event.target;
-    // Set volume to 100%
-    event.target.setVolume(100);
+    // Set volume to question audio volume (defaults to 80%)
+    event.target.setVolume(Math.min(100, Math.max(0, volume)));
     if (isMusicMode) {
       event.target.playVideo();
       setIsPlaying(true);

@@ -158,7 +158,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
             >
               <span className="text-3xl mb-1">{secondPlace.avatar || '🥈'}</span>
               <span className="font-bold text-xs sm:text-sm text-white truncate max-w-[90px]">
-                {secondPlace.isHost && secondPlace.name && secondPlace.name !== 'Hôte' && secondPlace.name !== 'Host' ? `${secondPlace.name} (${t('host', language)})` : secondPlace.name}
+                {secondPlace.name}
               </span>
               <span className="text-xs font-black text-slate-300 mb-2">
                 {secondPlace.score.toLocaleString()} pts
@@ -182,7 +182,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               <Crown className="w-6 h-6 text-amber-400 animate-bounce mb-1" />
               <span className="text-4xl sm:text-5xl mb-1">{firstPlace.avatar || '👑'}</span>
               <span className="font-black text-sm sm:text-base text-yellow-300 truncate max-w-[110px]">
-                {firstPlace.isHost && firstPlace.name && firstPlace.name !== 'Hôte' && firstPlace.name !== 'Host' ? `${firstPlace.name} (${t('host', language)})` : firstPlace.name}
+                {firstPlace.name}
               </span>
               <span className="text-xs sm:text-sm font-black text-amber-400 mb-2">
                 {firstPlace.score.toLocaleString()} pts
@@ -205,7 +205,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
             >
               <span className="text-3xl mb-1">{thirdPlace.avatar || '🥉'}</span>
               <span className="font-bold text-xs sm:text-sm text-white truncate max-w-[90px]">
-                {thirdPlace.isHost && thirdPlace.name && thirdPlace.name !== 'Hôte' && thirdPlace.name !== 'Host' ? `${thirdPlace.name} (${t('host', language)})` : thirdPlace.name}
+                {thirdPlace.name}
               </span>
               <span className="text-xs font-black text-amber-600 mb-2">
                 {thirdPlace.score.toLocaleString()} pts
@@ -354,7 +354,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-sm text-white truncate">
-                          {player.isHost && player.name && player.name !== 'Hôte' && player.name !== 'Host' ? `${player.name} (${t('host', language)})` : player.name}
+                          {player.name}
                         </span>
                         {player.isHost && (
                           <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" title={t('host', language)} />

@@ -41,7 +41,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameStyle === 'slideshow') return; // Disable keyboard shortcuts in slideshow mode
 
-      if (isAnswered) {
+      if (isAnswered || selectedOption) {
         if (isHost && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onNextQuestion();
@@ -63,14 +63,15 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAnswered, question.options, onSelectOption, onNextQuestion, isHost, gameStyle]);
+  }, [isAnswered, selectedOption, question.options, onSelectOption, onNextQuestion, isHost, gameStyle]);
 
   const optionLetters = ['A', 'B', 'C', 'D'];
+  const isLocked = isAnswered || Boolean(selectedOption);
 
   return (
-    <div className="flex flex-col gap-2 sm:gap-2.5 w-full min-h-0 shrink-0" id="question-card-container">
-      {/* 4 Choices Grid with Immersive Glass Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 w-full transition-all duration-300" id="options-grid">
+    <div className="flex flex-col gap-1.5 sm:gap-2.5 w-full min-h-0 shrink-0" id="question-card-container">
+      {/* 4 Choices Grid with Immersive Glass Buttons - 2x2 Responsive Grid */}
+      <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5 w-full transition-all duration-300" id="options-grid">
         {question.options.map((option, idx) => {
           const letter = optionLetters[idx] || `${idx + 1}`;
           const isSelected = selectedOption === option;
@@ -84,8 +85,11 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             : 'border-white/30 text-white/70 group-hover:border-purple-400 group-hover:text-purple-300';
 
           if (!isAnswered && isSelected) {
-            btnClasses = 'border-2 border-purple-400 bg-purple-600/60 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]';
-            radioCircle = 'border-purple-300 bg-purple-500 text-white font-black';
+            btnClasses = 'border-2 border-purple-400 bg-purple-600/70 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)] ring-2 ring-purple-300/40 pointer-events-none';
+            radioCircle = 'border-purple-200 bg-purple-500 text-white font-black';
+          } else if (!isAnswered && isLocked && !isSelected) {
+            btnClasses = 'opacity-30 border-white/10 bg-white/5 text-white/40 pointer-events-none';
+            radioCircle = 'border-white/15 text-white/20';
           } else if (isAnswered) {
             if (isCorrect) {
               btnClasses =
@@ -96,8 +100,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 'border-2 border-red-400 bg-red-600/80 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)] pointer-events-none';
               radioCircle = 'border-red-300 bg-red-400 text-white font-black';
             } else {
-              btnClasses = 'opacity-35 border-white/10 bg-white/5 text-white/50 pointer-events-none';
-              radioCircle = 'border-white/15 text-white/30';
+              btnClasses = 'opacity-30 border-white/10 bg-white/5 text-white/40 pointer-events-none';
+              radioCircle = 'border-white/15 text-white/20';
             }
           }
 
@@ -105,20 +109,20 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             <button
               key={idx}
               id={`option-btn-${idx}`}
-              onClick={() => !isAnswered && onSelectOption(option)}
-              onMouseEnter={() => !isAnswered && onHoverSound?.()}
-              disabled={isAnswered || gameStyle === 'slideshow'}
-              className={`group relative min-h-[42px] sm:min-h-[46px] border rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2 flex items-center justify-between transition-all duration-150 text-left ${btnClasses} ${
-                !isAnswered && gameStyle !== 'slideshow' ? 'cursor-pointer active:scale-[0.98] transform hover:scale-[1.005]' : ''
+              onClick={() => !isLocked && gameStyle !== 'slideshow' && onSelectOption(option)}
+              onMouseEnter={() => !isLocked && onHoverSound?.()}
+              disabled={isLocked || gameStyle === 'slideshow'}
+              className={`group relative min-h-[38px] sm:min-h-[44px] border rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between transition-all duration-150 text-left ${btnClasses} ${
+                !isLocked && gameStyle !== 'slideshow' ? 'cursor-pointer active:scale-[0.98] transform hover:scale-[1.005]' : ''
               }`}
             >
-              <div className="flex items-center gap-2.5 pr-1 min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 pr-1 min-w-0 flex-1">
                 <span
-                  className={`${isAnswered ? 'w-5 h-5 text-[10px]' : 'w-5 h-5 sm:w-6 sm:h-6 text-xs'} rounded-full flex items-center justify-center font-bold border transition-colors shrink-0 ${radioCircle}`}
+                  className={`${isLocked ? 'w-4 h-4 sm:w-5 sm:h-5 text-[9px] sm:text-[10px]' : 'w-4 h-4 sm:w-5 sm:h-5 text-[10px] sm:text-xs'} rounded-full flex items-center justify-center font-bold border transition-colors shrink-0 ${radioCircle}`}
                 >
                   {letter}
                 </span>
-                <span className={`font-bold tracking-tight ${isAnswered ? 'text-xs sm:text-sm' : 'text-xs sm:text-sm md:text-base'} text-white group-hover:text-purple-200 transition-colors truncate`}>
+                <span className={`font-bold tracking-tight text-[11px] sm:text-xs md:text-sm text-white group-hover:text-purple-200 transition-colors truncate`}>
                   {option}
                 </span>
               </div>
@@ -126,10 +130,10 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               {/* Status Indicator */}
               <div className="shrink-0">
                 {isAnswered && isCorrect && (
-                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300 animate-bounce" />
+                  <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-300 animate-bounce" />
                 )}
                 {isAnswered && isSelected && !isCorrect && (
-                  <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-200" />
+                  <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-200" />
                 )}
               </div>
             </button>

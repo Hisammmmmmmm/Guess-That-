@@ -107,6 +107,8 @@ export interface GameSettings {
   durationPerQuestion: number; // in seconds (10, 15, 20, 30)
   masterVolume: number; // 0 to 1
   sfxVolume: number;    // 0 to 1
+  menuMusicVolume: number; // 0 to 1 (default 0.1)
+  questionMusicVolume: number; // 0 to 1 (default 0.8)
   musicVolume: number;  // 0 to 1
   soundEffectsEnabled: boolean;
   musicEnabled: boolean;

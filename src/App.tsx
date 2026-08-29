@@ -92,16 +92,18 @@ export default function App() {
   const timerRef = useRef<number | null>(null);
   const lastTickSecondRef = useRef<number>(-1);
 
-  // Settings State - Default speechCluesEnabled to false as requested (TTS disabled by default)
+  // Settings State - Default speechCluesEnabled to false as requested (TTS disabled by default), menuMusicVolume at 10%, questionMusicVolume at 80%
   const [settings, setSettings] = useState<GameSettings>({
     difficulty: 'medium',
     gameMode: 'quiz',
     gameStyle: 'competitive',
     language: 'fr',
     durationPerQuestion: 20,
-    masterVolume: 0.8,
+    masterVolume: 1.0,
     sfxVolume: 0.85,
-    musicVolume: 0.6,
+    menuMusicVolume: 0.1,
+    questionMusicVolume: 0.8,
+    musicVolume: 0.1,
     soundEffectsEnabled: true,
     musicEnabled: true,
     progressiveBlur: true,
@@ -151,9 +153,13 @@ export default function App() {
   // Stored player profile (Host or guest)
   const [profileName, setProfileName] = useState<string>(() => {
     try {
-      return localStorage.getItem('guessthat_player_name') || 'Hôte';
+      const saved = localStorage.getItem('guessthat_player_name');
+      if (saved && saved.trim() && saved !== 'Hôte' && saved !== 'Host') {
+        return saved.trim();
+      }
+      return 'Michel';
     } catch {
-      return 'Hôte';
+      return 'Michel';
     }
   });
   const [profileAvatar, setProfileAvatar] = useState<string>(() => {
@@ -477,14 +483,43 @@ export default function App() {
   const updateSettings = (newSettings: Partial<GameSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
+      const master = updated.masterVolume ?? 1.0;
+
       if (newSettings.masterVolume !== undefined) {
         soundEngine.setMasterVolume(newSettings.masterVolume);
+        if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.setVolume === 'function') {
+          try {
+            const menuVol = updated.menuMusicVolume ?? 0.1;
+            bgYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(menuVol * master * 100))));
+          } catch {}
+        }
+        if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
+          try {
+            const qVol = updated.questionMusicVolume ?? 0.8;
+            mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
+          } catch {}
+        }
       }
       if (newSettings.sfxVolume !== undefined) {
         soundEngine.setSfxVolume(newSettings.sfxVolume);
       }
-      if (newSettings.musicVolume !== undefined) {
-        soundEngine.setMusicVolume(newSettings.musicVolume);
+      if (newSettings.menuMusicVolume !== undefined || newSettings.musicVolume !== undefined) {
+        const menuVol = newSettings.menuMusicVolume ?? newSettings.musicVolume ?? 0.1;
+        soundEngine.setMenuMusicVolume(menuVol);
+        if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.setVolume === 'function') {
+          try {
+            bgYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(menuVol * master * 100))));
+          } catch {}
+        }
+      }
+      if (newSettings.questionMusicVolume !== undefined) {
+        const qVol = newSettings.questionMusicVolume;
+        soundEngine.setQuestionMusicVolume(qVol);
+        if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
+          try {
+            mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
+          } catch {}
+        }
       }
       if (newSettings.soundEffectsEnabled !== undefined) {
         soundEngine.setSfxMuted(!newSettings.soundEffectsEnabled);
@@ -566,7 +601,7 @@ export default function App() {
     // All questions are generated dynamically by AI as requested, while friends can already scan and join
     if (finalStyle === 'competitive_room' && screen !== 'room_lobby' && !multiplayerService.getCurrentRoomCode()) {
       multiplayerService.createRoom({
-        hostName: profileName || `${t('host', settings.language)} 👑`,
+        hostName: profileName?.trim() || 'Michel',
         avatar: profileAvatar || '👑',
         quizData: {
           topic,
@@ -1021,7 +1056,7 @@ export default function App() {
 
   // Option Selected Handler
   const handleSelectOption = (option: string) => {
-    if (isAnswered || !currentQuestion || settings.gameStyle === 'slideshow') return;
+    if (isAnswered || selectedOption || !currentQuestion || settings.gameStyle === 'slideshow') return;
 
     if (ttsAudioRef.current) {
       ttsAudioRef.current.pause();
@@ -1183,7 +1218,7 @@ export default function App() {
     const preparedData = prepareQuizData(dataToUse);
     setQuizData(preparedData);
     multiplayerService.createRoom({
-      hostName: profileName || 'Hôte',
+      hostName: profileName?.trim() || 'Michel',
       avatar: profileAvatar || '👑',
       quizData: preparedData,
       difficulty: settings.difficulty,
@@ -1258,8 +1293,8 @@ export default function App() {
               } catch (err) {
                 // ignore
               }
-              // Lower volume significantly in quiz mode so voice TTS is audible; reduce to 10% in visual blind test
-              const baseVol = settings.musicVolume * 100;
+              // Menu music base volume is 10% by default, multiplied by master volume
+              const baseVol = Math.round((settings.menuMusicVolume ?? settings.musicVolume ?? 0.1) * (settings.masterVolume ?? 1.0) * 100);
               let targetVol = baseVol;
               if (screen === 'playing') {
                 if (settings.gameMode === 'quiz') {
@@ -1303,7 +1338,7 @@ export default function App() {
       <main
         className={`relative z-10 w-full flex-1 flex flex-col items-center justify-start ${
           screen === 'playing'
-            ? 'p-2 sm:p-3 md:p-4 pt-20 sm:pt-24 md:pt-24 max-w-7xl xl:max-w-[1550px] 2xl:max-w-[1650px] mx-auto overflow-y-auto overflow-x-hidden custom-scrollbar min-h-screen pb-4'
+            ? 'p-1.5 sm:p-3 md:p-4 pt-16 sm:pt-20 md:pt-22 max-w-7xl xl:max-w-[1550px] 2xl:max-w-[1650px] mx-auto h-[100dvh] sm:h-auto sm:min-h-screen overflow-hidden sm:overflow-y-auto custom-scrollbar'
             : 'px-4 sm:px-6 py-6 max-w-6xl mx-auto justify-center'
         }`}
       >
@@ -1490,20 +1525,28 @@ export default function App() {
           )}
 
           {/* 3. ACTIVE QUIZ PLAYING - MASTER RESPONSIVE CONTAINER */}
-          {screen === 'playing' && currentQuestion && quizData && (
+          {screen === 'playing' && currentQuestion && quizData && (() => {
+            const roomPlayersList: RoomPlayer[] = roomState ? (Object.values(roomState.players || {}) as RoomPlayer[]) : [];
+            const sortedRoomPlayers = [...roomPlayersList].sort((a, b) => b.score - a.score);
+            const myRoomRankIndex = sortedRoomPlayers.findIndex(p => p.id === currentPlayerId);
+            const myRoomRank = myRoomRankIndex >= 0 ? myRoomRankIndex + 1 : 1;
+            const myRoomPlayer = sortedRoomPlayers.find(p => p.id === currentPlayerId);
+            const myDisplayScore = roomState && myRoomPlayer ? myRoomPlayer.score : stats.score;
+
+            return (
             <motion.div
               key={`question-${currentQuestionIndex}`}
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="w-full flex flex-col lg:flex-row gap-3 sm:gap-4 items-stretch justify-center min-h-0"
+              className="w-full flex flex-col lg:flex-row gap-3 sm:gap-4 items-stretch justify-center min-h-0 h-full sm:h-auto"
             >
-              {/* CADRE CLASSEMENT MULTIJOUEUR À GAUCHE (si mode Compétitif salon) */}
+              {/* CADRE CLASSEMENT MULTIJOUEUR À GAUCHE (UNIQUEMENT SUR GRANDS ÉCRANS / DESKTOP) */}
               {roomState && (
-                <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col">
+                <div className="hidden lg:flex w-full lg:w-72 xl:w-80 shrink-0 flex-col">
                   <MultiplayerScoreboard
-                        language={roomState?.language || settings.language}
+                    language={roomState?.language || settings.language}
                     roomState={roomState}
                     currentPlayerId={currentPlayerId || ''}
                     onSendReaction={(emoji) => (currentRoomCode || currentRoomCodeRef.current) && multiplayerService.sendReaction(currentRoomCode || currentRoomCodeRef.current || '', emoji)}
@@ -1511,41 +1554,59 @@ export default function App() {
                 </div>
               )}
 
-              {/* GRAND CADRE CONTENEUR DU JEU RESPONSIVE */}
+              {/* GRAND CADRE CONTENEUR DU JEU RESPONSIVE (SANS SCROLL SUR MOBILE) */}
               <div
                 id="game-master-container"
-                className="flex-1 w-full min-w-0 flex flex-col justify-between bg-black/40 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/15 p-2.5 sm:p-4 md:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.6)] gap-2.5 sm:gap-3"
+                className="flex-1 w-full min-w-0 flex flex-col justify-between bg-black/40 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/15 p-2 sm:p-3 md:p-4 shadow-[0_10px_35px_rgba(0,0,0,0.6)] gap-1.5 sm:gap-2.5 overflow-hidden max-h-full"
               >
                 {/* 1. HAUT DU CONTENEUR: Zone Médias et Cadres d'informations */}
-                <div className="w-full flex flex-col gap-2 sm:gap-2.5">
+                <div className="w-full flex flex-col gap-1.5 sm:gap-2.5">
                   
-                  {/* Bandeau d'état compact pour Mobile */}
-                  <div className="md:hidden flex flex-row items-center justify-between gap-2 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shrink-0">
-                    <div className="flex items-center gap-2">
+                  {/* Bandeau d'état compact sur une seule ligne pour Mobile (Position, Rang, Score) */}
+                  <div className="md:hidden flex flex-row items-center justify-between gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/10 shrink-0 w-full text-xs">
+                    {/* Gauche: Chronomètre & Question # */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <CircularCountdown
                         timeLeft={timeLeft}
                         totalTime={settings.durationPerQuestion}
                         primaryColor={quizData.primaryColor}
-                        size={32}
+                        size={24}
                       />
-                      <span className="text-xs uppercase font-black text-purple-400 font-heading">
+                      <span className="text-[11px] font-black text-purple-300 font-heading">
                         Q{currentQuestionIndex + 1}/{quizData.questions.length}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {settings.gameStyle === 'competitive' && stats.streak >= 3 && (
-                        <span className="text-[9px] font-bold text-orange-400 bg-orange-500/20 px-1.5 py-0.5 rounded-md border border-orange-500/30 flex items-center gap-0.5">
-                          <Flame className="w-2.5 h-2.5" /> x{stats.streak >= 5 ? '3.0' : '2.0'}
+
+                    {/* Droite: Position, Rang et Score sur la même ligne */}
+                    {roomState ? (
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/25 border border-purple-400/40 text-[11px] font-extrabold text-purple-200">
+                          <span>{myRoomRank === 1 ? '🥇' : myRoomRank === 2 ? '🥈' : myRoomRank === 3 ? '🥉' : '🏅'}</span>
+                          <span>
+                            {myRoomRank}
+                            {settings.language === 'fr' ? (myRoomRank === 1 ? 'er' : 'e') : (myRoomRank === 1 ? 'st' : myRoomRank === 2 ? 'nd' : myRoomRank === 3 ? 'rd' : 'th')} / {roomPlayersList.length}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-black text-yellow-400 font-heading shrink-0">
+                          {myDisplayScore.toLocaleString()} pts
                         </span>
-                      )}
-                      {settings.gameStyle === 'competitive' && (
-                        <span className="text-xs font-black text-yellow-400 font-heading">{stats.score.toLocaleString()} pts</span>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {settings.gameStyle === 'competitive' && stats.streak >= 3 && (
+                          <span className="text-[9px] font-bold text-orange-400 bg-orange-500/20 px-1.5 py-0.5 rounded-md border border-orange-500/30 flex items-center gap-0.5">
+                            <Flame className="w-2.5 h-2.5" /> x{stats.streak >= 5 ? '3.0' : '2.0'}
+                          </span>
+                        )}
+                        {settings.gameStyle === 'competitive' && (
+                          <span className="text-[11px] font-black text-yellow-400 font-heading">{stats.score.toLocaleString()} pts</span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Zone Médias & Colonnes Latérales */}
-                  <div className="w-full flex flex-col md:grid md:grid-cols-12 gap-2.5 sm:gap-3 items-stretch">
+                  <div className="w-full flex flex-col md:grid md:grid-cols-12 gap-2 sm:gap-3 items-stretch">
                     
                     {/* Colonne Gauche (Desktop): Question #, Chrono & Gain, Indice Audio */}
                     <div className="hidden md:flex md:col-span-3 flex-col gap-2 min-h-0 justify-between">
@@ -1594,13 +1655,14 @@ export default function App() {
                             youtubeVideoId={activeVideoId}
                             gameMode={settings.gameMode}
                             language={roomState?.language || settings.language}
+                            volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                           />
                         </div>
                       )}
                     </div>
 
                     {/* Colonne Centrale (Mobile & Desktop): Cadre Média UNIQUE */}
-                    <div className="w-full md:col-span-6 h-[150px] sm:h-[180px] md:h-[200px] rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-inner relative shrink-0">
+                    <div className="w-full md:col-span-6 h-[105px] xs:h-[125px] sm:h-[165px] md:h-[200px] rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-inner relative shrink-0">
                       {settings.gameMode === 'music_blind_test' ? (
                         <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
                           {/* Visualiseur musical animé avant réponse */}
@@ -1609,13 +1671,13 @@ export default function App() {
                             <div className="relative flex flex-col items-center justify-center gap-2 z-10">
                               <div className="relative">
                                 <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-xl animate-pulse" />
-                                <div className="w-20 h-20 sm:w-22 sm:h-22 bg-black/60 border border-white/20 rounded-full flex items-center justify-center shadow-lg relative z-10">
-                                  <Music className="w-9 h-9 sm:w-10 sm:h-10 text-white/80 animate-pulse" />
+                                <div className="w-16 h-16 sm:w-22 sm:h-22 bg-black/60 border border-white/20 rounded-full flex items-center justify-center shadow-lg relative z-10">
+                                  <Music className="w-7 h-7 sm:w-10 sm:h-10 text-white/80 animate-pulse" />
                                 </div>
                                 <div className="absolute inset-0 rounded-full border border-white/30 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
                                 <div className="absolute inset-0 rounded-full border border-white/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite_1s]" />
                               </div>
-                              <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">{t('listen_clue', roomState?.language || settings.language)}</span>
+                              <span className="text-[9px] sm:text-[10px] font-bold text-white/60 uppercase tracking-widest">{t('listen_clue', roomState?.language || settings.language)}</span>
                             </div>
                           </div>
 
@@ -1646,7 +1708,8 @@ export default function App() {
                                   } catch (err) {
                                     // ignore
                                   }
-                                  e.target.setVolume(100);
+                                  const qVol = Math.min(100, Math.max(0, Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)));
+                                  e.target.setVolume(qVol);
                                   e.target.playVideo();
                                 }}
                                 onEnd={(e) => {
@@ -1720,7 +1783,7 @@ export default function App() {
 
                   {/* Indice Audio Mobile (si non blind test musical) */}
                   {settings.gameMode !== 'music_blind_test' && (
-                    <div className="md:hidden bg-black/30 backdrop-blur-md p-1.5 rounded-xl border border-white/10 flex items-center justify-center shrink-0">
+                    <div className="md:hidden bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center justify-center shrink-0">
                       <AudioCluePlayer
                         audioNotes={currentQuestion.audioNotes}
                         clueText={currentQuestion.clue}
@@ -1729,19 +1792,20 @@ export default function App() {
                         youtubeVideoId={activeVideoId}
                         gameMode={settings.gameMode}
                         language={roomState?.language || settings.language}
+                        volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                       />
                     </div>
                   )}
                 </div>
 
                 {/* 2. BAS DU CONTENEUR: Question & Choix de réponses */}
-                <div className="w-full flex flex-col gap-2 shrink-0 mt-1">
+                <div className="w-full flex flex-col gap-1.5 sm:gap-2 shrink-0 mt-0.5">
                   {/* Titre de la question sur une seule ligne avec défilement horizontal si trop long */}
-                  <div className="px-2 text-center shrink-0 overflow-hidden">
+                  <div className="px-1 text-center shrink-0 overflow-hidden">
                     {currentQuestion.question.length > 100 ? (
                       <div className="w-full overflow-hidden whitespace-nowrap relative">
                         <h2
-                          className="animate-marquee-smooth inline-block text-sm sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md px-2"
+                          className="animate-marquee-smooth inline-block text-xs sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md px-2"
                           style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
                         >
                           {currentQuestion.question} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {currentQuestion.question}
@@ -1749,7 +1813,7 @@ export default function App() {
                       </div>
                     ) : (
                       <h2
-                        className="text-sm sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                        className="text-xs sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis px-1"
                         style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
                       >
                         {currentQuestion.question}
@@ -1758,9 +1822,9 @@ export default function App() {
                   </div>
 
                   {/* Cadre des réponses */}
-                  <div className="w-full bg-black/30 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-white/15 p-2 sm:p-2.5 shadow-xl max-w-4xl mx-auto shrink-0">
+                  <div className="w-full bg-black/30 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-white/15 p-1.5 sm:p-2.5 shadow-xl max-w-4xl mx-auto shrink-0">
                     <QuestionCard
-                language={roomState?.language || settings.language}
+                      language={roomState?.language || settings.language}
                       question={currentQuestion}
                       selectedOption={selectedOption}
                       isAnswered={isAnswered}
@@ -1778,7 +1842,8 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
-          )}
+            );
+          })()}
 
           {/* 4. RESULTS & SCORECARD */}
           {screen === 'results' && quizData && (
@@ -1863,6 +1928,9 @@ export default function App() {
         settings={settings}
         onUpdateSettings={updateSettings}
         primaryColor={quizData?.primaryColor || '#6366f1'}
+        playerName={profileName}
+        playerAvatar={profileAvatar}
+        onUpdatePlayerProfile={handleUpdateProfile}
       />
 
       {/* Subtle Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}

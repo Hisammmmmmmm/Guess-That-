@@ -16,7 +16,7 @@ class SoundEngine {
 
   private masterVol = 0.8;
   private sfxVol = 1.7;
-  private musicVol = 0.6;
+  private musicVol = 0.1;
   private isSfxMuted = false;
   private isMusicMuted = false;
   private audioBufferCache: Record<string, AudioBuffer | null> = {};
@@ -180,6 +180,14 @@ class SoundEngine {
     if (this.musicGain && this.ctx && !this.isMusicMuted) {
       this.musicGain.gain.setTargetAtTime(this.musicVol, this.ctx.currentTime, 0.05);
     }
+  }
+
+  public setMenuMusicVolume(val: number) {
+    this.setMusicVolume(val);
+  }
+
+  public setQuestionMusicVolume(_val: number) {
+    // Stored for YouTube player controls
   }
 
   public setSfxMuted(muted: boolean) {

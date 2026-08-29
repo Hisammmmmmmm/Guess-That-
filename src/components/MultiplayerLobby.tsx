@@ -365,7 +365,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1">
                           <span className="font-bold text-xs text-white truncate max-w-[120px] sm:max-w-[150px]">
-                            {player.isHost && player.name && player.name !== 'Hôte' && player.name !== 'Host' ? `${player.name} (${t('host', language)})` : player.name}
+                            {player.name}
                           </span>
                           {player.isHost && (
                             <Crown className="w-3 h-3 text-amber-400 shrink-0" title={t('host', language)} />
