@@ -796,7 +796,15 @@ export default function App() {
                 .then((data) => {
                   if (data?.videoId) {
                     ytCacheRef.current[searchKey] = data.videoId;
-                    q.youtubeVideoId = data.videoId;
+                    setQuizData((prev) => {
+                      if (!prev) return prev;
+                      const newQuestions = [...prev.questions];
+                      const idx = newQuestions.findIndex((quest) => quest.id === q.id);
+                      if (idx !== -1) {
+                        newQuestions[idx] = { ...newQuestions[idx], youtubeVideoId: data.videoId };
+                      }
+                      return { ...prev, questions: newQuestions };
+                    });
                   }
                 })
                 .catch(() => {});
@@ -1073,6 +1081,7 @@ export default function App() {
           // Otherwise search for the question's specific query
           const questionQuery = currentQuestion.youtubeSearchQuery || `ost ${currentQuestion.correctAnswer} ${quizData.topic}`;
           if (ytCacheRef.current[questionQuery]) {
+            currentQuestion.youtubeVideoId = ytCacheRef.current[questionQuery];
             setYtVideoId(ytCacheRef.current[questionQuery]);
             return;
           }
@@ -1082,6 +1091,7 @@ export default function App() {
             .then((data) => {
               if (isActive && data?.videoId) {
                 ytCacheRef.current[questionQuery] = data.videoId;
+                currentQuestion.youtubeVideoId = data.videoId;
                 setYtVideoId(data.videoId);
               }
             })
@@ -1756,7 +1766,7 @@ export default function App() {
                           </div>
 
                           {/* Lecteur Vidéo YouTube optimisé 480p (Instance unique) */}
-                          {currentQuestion.youtubeVideoId && (
+                          {activeVideoId && (
                             <div className={`absolute inset-0 w-full h-full z-20 transition-opacity duration-700 ${isAnswered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                               <YouTube
                                 videoId={activeVideoId}
@@ -2055,7 +2065,7 @@ export default function App() {
 
       {/* Live Statistics Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
       {screen !== 'playing' && (
-        <footer className="relative z-10 py-1.5 sm:py-2.5 px-2 sm:px-4 text-center border-t border-white/10 backdrop-blur-md bg-black/40 shrink-0">
+        <footer className="hidden sm:block relative z-10 py-1.5 sm:py-2.5 px-2 sm:px-4 text-center border-t border-white/10 backdrop-blur-md bg-black/40 shrink-0">
           <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-7 gap-y-0.5 text-[10px] sm:text-xs text-white/70">
             {/* Joueurs en direct */}
             <div className="flex items-center gap-1.5">

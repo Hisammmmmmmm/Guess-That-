@@ -785,121 +785,116 @@ async function startServer() {
           apiKey,
         });
 
-        let modeInstructions = '';
-        if (gameMode === 'visual_blind_test') {
-          modeInstructions = `MODE : VISUAL BLIND TEST (Image Recognition)
-- The objective is STRICTLY to recognize the visual entity displayed (character, object, place, animal, or originating franchise/movie/game).
-- "question" : MUST be very short, direct and in ${langName}, without any spoilers. Vary the phrasing according to the image context. Examples: "Who is this character?", "What is this object?", "Which movie/series is this from?", "Where is this location?".
-- "options" : 4 plausible, distinct choices in ${langName} (including 1 correct answer).
-- "clue" : Leave empty string "" (the image is the only clue).
-- "wikiSearchQuery" : The exact official entity name used to retrieve the high-quality picture (e.g. "Dragon Balls", "Master Sword Zelda", "Batarang", "Central Perk", "Millennium Falcon").`;
-        } else if (gameMode === 'music_blind_test') {
-          modeInstructions = `MODE : MUSIC BLIND TEST (Audio Recognition)
-- The objective is to identify cult songs, themes, OSTs or audio cues.
-- "question" : MUST focus strictly on listening, in ${langName}. Examples: "Which movie/show is this music from?", "Whose character theme is this?", "What is this sound from?". No spoilers in the question.
-- "options" : 4 distinct choices (artists, song names, movies, or characters) in ${langName}.
-- "youtubeSearchQuery" : The exact title of the OST/song/theme to find on YouTube (e.g. "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March").`;
-        } else {
-          modeInstructions = `MODE : CLASSIC QUIZ
-- Varied general knowledge questions, riddles, quotes and trivia on the theme, written entirely in ${langName}.
-- "youtubeSearchQuery" : For each question, provide the exact title of a song/OST/audio ambiance matching the question's topic.`;
-        }
+// 2. Instructions spécifiques au mode de jeu (CORRIGÉES)
+      let modeInstructions = '';
+      if (gameMode === 'visual_blind_test') {
+        modeInstructions = `MODE : BLIND TEST VISUEL (Reconnaissance d'image)
+- L'objectif est STRICTEMENT de reconnaître l'élément visuel affiché (personnage, objet, lieu, ou l'œuvre d'origine).
+- "question" : DOIT ÊTRE TRÈS COURTE, SIMPLE ET DIRECTE SANS AUCUN SPOILER. Varie les formulations selon le contexte de l'image. Exemples : "Qui est ce personnage ?", "Quel est cet objet ?", "À qui appartient cet objet ?", "De quelle série vient cette image ?", "Quel est ce lieu ?". Ne te limite pas à "Qui est ce personnage ?".
+- "options" : 4 propositions précises (dont 1 bonne réponse).
+- "clue" : Laisse ce champ vide "" (l'image est l'unique support de devinette).
+- "wikiSearchQuery" : LE NOM COMPLET OFFICIEL de l'entité/objet/série pour obtenir son image via moteur de recherche (ex: "Dragon Balls", "Épée de légende Zelda", "Batarang", "Central Perk", "Millennium Falcon"). Sois très précis pour garantir une bonne image.`;
+      } else if (gameMode === 'music_blind_test') {
+        modeInstructions = `MODE : BLIND TEST MUSICAL (Reconnaissance audio & thèmes)
+- L'objectif est d'identifier les musiques cultes, génériques, OST ou thèmes sonores.
+- "question" : DOIT porter UNIQUEMENT sur l'écoute. Pose SIMPLEMENT l'une de ces questions : "À quelle série/film vient cette musique ?", "De quel personnage cette musique est-elle le thème ?" ou "C'est le son de quoi ?". NE DONNE AUCUN SPOILER DANS LA QUESTION.
+- "options" : 4 propositions de morceaux, œuvres ou personnages.
+- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March"). Il servira à jouer la vraie musique.`;
+      } else {
+        modeInstructions = `MODE : QUIZ CLASSIQUE
+- Questions variées de culture générale, énigmes, citations et devinettes sur le thème.
+- "youtubeSearchQuery" : POUR CHAQUE QUESTION, fournis LE TITRE EXACT d'une musique, OST, ou ambiance sonore liée spécifiquement à la réponse ou au sujet de cette question (ex: "Musique Tristesse et Douleur Naruto", "Star Wars Imperial March", "Ambiance sonore forêt magique"). Cette musique sera jouée en fond sonore pendant la question.`;
+      }
 
-        let difficultyInstructions = '';
-        if (difficulty === 'expert') {
-          difficultyInstructions = `EXPERT: Highest difficulty for masters. Precise and challenging questions. The 4 options must be very similar, vicious and designed to test real knowledge.`;
-        } else if (difficulty === 'hard') {
-          difficultyInstructions = `HARD: Obscure details, secondary characters, rare objects, specific places. No easy questions.`;
-        } else if (difficulty === 'medium') {
-          difficultyInstructions = `MEDIUM: Balanced mix between popular knowledge and tricky questions.`;
-        } else {
-          difficultyInstructions = `EASY: Accessible for beginners, famous elements and iconic moments.`;
-        }
+      let difficultyInstructions = '';
+      if (difficulty === 'expert') {
+        difficultyInstructions = `EXPERT : Niveau d'érudit absolu. Sélectionne les éléments les plus pointus, obscurs ou spécifiques possibles. Les questions doivent être ultra-précises. Les 4 propositions de réponses doivent être extrêmement similaires, vicieuses et conçues pour induire en erreur le joueur. Laisse aucune place au hasard.`;
+      } else if (difficulty === 'hard') {
+        difficultyInstructions = `TRÈS DIFFICILE : Choisis les éléments les plus obscurs, des personnages très secondaires, des objets rares, des lieux très spécifiques ou des thèmes musicaux oubliés. Aucune question facile ou moyenne.`;
+      } else if (difficulty === 'medium') {
+        difficultyInstructions = `MOYEN : Équilibre entre des éléments connus et quelques pièges.`;
+      } else {
+        difficultyInstructions = `FACILE : Pour les débutants, les éléments les plus emblématiques et connus.`;
+      }
 
-        const prompt = `CRITICAL LANGUAGE REQUIREMENT:
-The user selected language: "${langName}" (Language Code: "${language}").
-EVERY SINGLE USER-FACING TEXT FIELD in your JSON response ("themeTitle", "themeDescription", "question", "options", "correctAnswer", "clue", "trivia", "category") MUST BE WRITTEN 100% EXCLUSIVELY IN ${langName.toUpperCase()}.
-- Do NOT output French or English unless that specific language is requested.
-- All 15 questions MUST be in ${langName}.
-- All 4 options and the correctAnswer for every question MUST be in ${langName}.
-- The trivia and clue MUST be in ${langName}.
-
-Generate a 15-question quiz for the game "GuessThat!" on the following topic: "${topic}".
+      const prompt = `Tu es le créateur expert du jeu "Blind Test Ultimate".
+Génère un quiz de 15 énigmes captivantes et stimulantes sur le thème suivant : "${topic}".
 
 ${modeInstructions}
 
-RULES:
-1. Generate EXACTLY 15 questions progressive in difficulty for: ${difficultyInstructions}.
-2. For EACH question:
-   - "question" : Concise and engaging question in ${langName}.
-   - "options" : Array of 4 distinct choices in ${langName}. ABSOLUTELY NEVER append, glue, or include the theme/topic title in the options (e.g. if topic is "Animés", option is "Naruto", NOT "Naruto 「Animés」" or "Naruto (Animés)"). The options must be ONLY the answer itself. Shuffle them randomly (the correct answer MUST NOT always be in first position!).
-   - "correctAnswer" : Exact string matching one of the 4 options word-for-word in ${langName}.
-   - "wikiSearchQuery" : Precise search term to retrieve the image (e.g. "Monkey D. Luffy", "Lightsaber Star Wars", "Pikachu").
-   - "youtubeSearchQuery" : Search query for the theme or soundtrack on YouTube.
-   - "clue" : Short helpful clue in ${langName} (empty "" if visual blind test).
-   - "audioNotes" : Array of 4 to 7 frequencies in Hz (e.g. [261.63, 329.63, 392.0, 523.25]).
-   - "imagePrompt" : Visual description in ${langName}.
-   - "trivia" : A captivating "Did you know?" trivia fact in ${langName}.
-   - "category" : Precise subcategory in ${langName}.
-3. For the theme:
-   - "themeTitle" : Catchy title in ${langName}.
-   - "themeDescription" : Short description in ${langName}.
-   - "primaryColor" : Dominant hex color (e.g. "#ec4899", "#8b5cf6", "#f59e0b", "#10b981", "#3b82f6", "#ef4444").
-   - "accentColor" : Contrasted secondary hex color.
-   - "ambientSound" : One of: "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
+RÈGLES IMPORTANTES :
+1. Génère EXACTEMENT 15 questions progressives (de la plus accessible à la plus pointue pour ce niveau).
+2. Pour CHAQUE question :
+   - "question" : L'énoncé doit très court et adapté au mode.
+   - "options" : 4 propositions crédibles et distinctes. ATTENTION : Mélange impérativement l'ordre des options de façon aléatoire (la bonne réponse NE DOIT PAS être systématiquement en première position !).
+   - "correctAnswer" : La réponse exacte (doit correspondre mot pour mot à l'une des 4 options).
+   - "wikiSearchQuery" : Le terme précis pour trouver l'IMAGE (ex: "Monkey D. Luffy", "Sabre laser Star Wars", "Pikachu"). ATTENTION : Cherche l'objet ou le personnage spécifique dont on parle, évite le logo de la série !
+   - "youtubeSearchQuery" : (Seulement pour Blind Test Musical) Le terme exact pour trouver la musique sur YouTube.
+   - "clue" : Un court indice (ou vide si blind test visuel).
+   - "audioNotes" : Un tableau de 4 à 7 fréquences sonores en Hertz (ex: [261.63, 329.63, 392.0, 523.25]) représentant un motif mélodique (optionnel si musical avec youtube).
+   - "imagePrompt" : Une courte description textuelle de l'élément visuel à identifier.
+   - "trivia" : Une anecdote captivante, insolite ou croustillante ("Le savais-tu ?").
+   - "category" : La sous-catégorie précise de l'élément (ex: "Personnage", "Film", "Monument", "Acteur", "Jeu vidéo", "Groupe de musique", "Espèce animale"). Utilisée pour cibler la recherche d'images complémentaires en anglais.
+3. Pour le thème global :
+   - "themeTitle" : Un titre percutant pour le blind test.
+   - "themeDescription" : Une courte phrase d'accroche pour ce thème.
+   - "primaryColor" : Une couleur hex dominante adaptée (ex: "#ec4899", "#8b5cf6", "#f59e0b", "#10b981", "#3b82f6", "#ef4444").
+   - "accentColor" : Une couleur hex secondaire contrastée.
+   - "ambientSound" : L'un de ces choix sonores obligatoirement : "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
 
-DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues, title) is strictly in ${langName}.`;
+Langue du contenu : ${language === 'fr' ? 'Français' : 'English'}.
+Niveau de difficulté : ${difficultyInstructions}`;
 
-        const config = {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              topic: { type: Type.STRING },
-              themeTitle: { type: Type.STRING },
-              themeDescription: { type: Type.STRING },
-              primaryColor: { type: Type.STRING },
-              accentColor: { type: Type.STRING },
-              themeMusicQuery: {
-                type: Type.STRING,
-                description: 'Exact YouTube search query for the overall theme background soundtrack (e.g. "Harry Potter Hedwig Theme OST", "Star Wars Main Theme", "80s retro quiz game show music")'
-              },
-              ambientSound: {
-                type: Type.STRING,
-                description: 'One of: synthwave, cinema, retro80s, fantasy, electro, jazzy, nature, space'
-              },
-              themeBgImage: { type: Type.STRING },
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.INTEGER },
-                    question: { type: Type.STRING },
-                    options: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING }
-                    },
-                    correctAnswer: { type: Type.STRING },
-                    wikiSearchQuery: { type: Type.STRING },
-                    youtubeSearchQuery: { type: Type.STRING },
-                    clue: { type: Type.STRING },
-                    audioNotes: {
-                      type: Type.ARRAY,
-                      items: { type: Type.NUMBER }
-                    },
-                    imagePrompt: { type: Type.STRING },
-                    imageUrl: { type: Type.STRING },
-                    trivia: { type: Type.STRING },
-                    category: { type: Type.STRING }
-                  },
-                  required: ['id', 'question', 'options', 'correctAnswer', 'clue', 'trivia']
-                }
-              }
+      const config = {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            topic: { type: Type.STRING },
+            themeTitle: { type: Type.STRING },
+            themeDescription: { type: Type.STRING },
+            primaryColor: { type: Type.STRING },
+            accentColor: { type: Type.STRING },
+            themeMusicQuery: {
+              type: Type.STRING,
+              description: 'Exact YouTube search query for the overall theme background soundtrack (e.g. "Harry Potter Hedwig Theme OST", "Star Wars Main Theme", "80s retro quiz game show music")'
             },
-            required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
-          }
-        };
+            ambientSound: {
+              type: Type.STRING,
+              description: 'One of: synthwave, cinema, retro80s, fantasy, electro, jazzy, nature, space'
+            },
+            themeBgImage: { type: Type.STRING },
+            questions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.INTEGER },
+                  question: { type: Type.STRING },
+                  options: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  correctAnswer: { type: Type.STRING },
+                  wikiSearchQuery: { type: Type.STRING },
+                  youtubeSearchQuery: { type: Type.STRING },
+                  clue: { type: Type.STRING },
+                  audioNotes: {
+                    type: Type.ARRAY,
+                    items: { type: Type.NUMBER }
+                  },
+                  imagePrompt: { type: Type.STRING },
+                  imageUrl: { type: Type.STRING },
+                  trivia: { type: Type.STRING },
+                  category: { type: Type.STRING }
+                },
+                required: ['id', 'question', 'options', 'correctAnswer', 'wikiSearchQuery', 'youtubeSearchQuery', 'clue', 'trivia']
+              }
+            }
+          },
+          required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
+        }
+      };
 
         const candidateModels = [
           'gemini-2.5-flash',
@@ -1484,6 +1479,7 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
           const qIdx = (typeof questionIndex === 'number' && questionIndex >= 0)
             ? questionIndex
             : room.currentQuestionIndex;
+          if (qIdx !== room.currentQuestionIndex) return;
           const currentQ = room.quizData?.questions?.[qIdx] || room.quizData?.questions?.[room.currentQuestionIndex];
           if (!currentQ) return;
 
