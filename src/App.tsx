@@ -18,6 +18,7 @@ import {
   QuizTheme,
   GameSettings,
   GameStats,
+  GlobalStats,
   GameScreen,
   Question,
   RoomState,
@@ -41,6 +42,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ResultsView } from './components/ResultsView';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { JoinRoomModal } from './components/JoinRoomModal';
+import { PublicRoomsModal } from './components/PublicRoomsModal';
 import { MultiplayerScoreboard } from './components/MultiplayerScoreboard';
 import { MultiplayerResultsView } from './components/MultiplayerResultsView';
 
@@ -136,6 +138,13 @@ export default function App() {
     answers: [],
   });
 
+  // Global Platform Statistics (Live players, Active rooms, Total generations)
+  const [globalStats, setGlobalStats] = useState<GlobalStats>({
+    onlinePlayers: 1,
+    activeRooms: 0,
+    totalGenerations: 1842,
+  });
+
   const bgYtPlayerRef = useRef<any>(null);
   const mainYtPlayerRef = useRef<any>(null);
 
@@ -145,7 +154,9 @@ export default function App() {
   const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
   const currentRoomCodeRef = useRef<string | null>(null);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isPublicRoomsModalOpen, setIsPublicRoomsModalOpen] = useState(false);
   const [joinModalInitialCode, setJoinModalInitialCode] = useState('');
+  const [isJoinModalCodeLocked, setIsJoinModalCodeLocked] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
   const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string; name: string }[]>([]);
@@ -278,6 +289,12 @@ export default function App() {
     const handleRoomUpdated = (data: any) => {
       if (!data?.room) return;
       setRoomState(data.room);
+      if (data.room.gameMode) {
+        setSettings((prev) => ({ ...prev, gameMode: data.room.gameMode }));
+      }
+      if (data.room.difficulty) {
+        setSettings((prev) => ({ ...prev, difficulty: data.room.difficulty }));
+      }
       if (data.room?.quizData?.questions?.length > 0) {
         setQuizData(data.room.quizData);
         setPendingQuizData(data.room.quizData);
@@ -480,6 +497,46 @@ export default function App() {
     };
   }, [currentPlayerId, quizData, settings.durationPerQuestion, settings.musicEnabled]);
 
+  // Global platform stats synchronization (Initial fetch + WebSocket listener + polling fallback)
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.totalGenerations === 'number') {
+          setGlobalStats(data);
+        }
+      })
+      .catch((err) => console.warn('Could not fetch global stats', err));
+
+    const handleGlobalStats = (data: any) => {
+      if (data?.stats) {
+        setGlobalStats(data.stats);
+      }
+    };
+
+    multiplayerService.on('global_stats', handleGlobalStats);
+
+    const statsInterval = setInterval(() => {
+      if (multiplayerService.isConnected()) {
+        multiplayerService.requestStats();
+      } else {
+        fetch('/api/stats')
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && typeof data.totalGenerations === 'number') {
+              setGlobalStats(data);
+            }
+          })
+          .catch(() => {});
+      }
+    }, 15000);
+
+    return () => {
+      clearInterval(statsInterval);
+      multiplayerService.off('global_stats', handleGlobalStats);
+    };
+  }, []);
+
   const updateSettings = (newSettings: Partial<GameSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
@@ -572,12 +629,13 @@ export default function App() {
     theme: QuizTheme,
     difficulty: GameDifficulty,
     gameMode: GameMode,
-    gameStyle: GameStyle
+    gameStyle: GameStyle,
+    isPublic?: boolean
   ) => {
     setSettings((prev) => ({ ...prev, difficulty, gameMode, gameStyle }));
     const localizedTitle = t(`preset_${theme.id}_title`, settings.language);
     const titleToUse = localizedTitle && !localizedTitle.startsWith('preset_') ? localizedTitle : theme.title;
-    generateQuizFromTopic(titleToUse, theme, difficulty, gameMode, gameStyle);
+    generateQuizFromTopic(titleToUse, theme, difficulty, gameMode, gameStyle, isPublic);
   };
 
   // --- AI GENERATE QUIZ FOR CUSTOM TOPIC ---
@@ -586,7 +644,8 @@ export default function App() {
     fallbackTheme?: QuizTheme,
     difficultyStr?: GameDifficulty,
     modeStr?: GameMode,
-    styleStr?: GameStyle
+    styleStr?: GameStyle,
+    isPublic?: boolean
   ) => {
     const finalDifficulty = difficultyStr || settings.difficulty;
     const finalMode = modeStr || settings.gameMode;
@@ -603,6 +662,7 @@ export default function App() {
       multiplayerService.createRoom({
         hostName: profileName?.trim() || 'Michel',
         avatar: profileAvatar || '👑',
+        isPublic: isPublic ?? true,
         quizData: {
           topic,
           themeTitle: fallbackTheme?.title || topic,
@@ -1230,8 +1290,10 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen w-full text-slate-100 font-sans selection:bg-purple-500 selection:text-white flex flex-col justify-between ${
-        screen === 'playing' ? 'h-screen max-h-screen overflow-hidden' : 'overflow-y-auto pt-16'
+      className={`w-full text-slate-100 font-sans selection:bg-purple-500 selection:text-white flex flex-col justify-between ${
+        screen === 'playing'
+          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden'
+          : 'min-h-[100dvh] max-h-[100dvh] sm:min-h-screen sm:max-h-none overflow-hidden sm:overflow-y-auto pt-12 sm:pt-16'
       }`}
       style={{ backgroundColor: '#0B0716' }}
     >
@@ -1336,10 +1398,10 @@ export default function App() {
 
       {/* Main Dynamic Viewport */}
       <main
-        className={`relative z-10 w-full flex-1 flex flex-col items-center justify-start ${
+        className={`relative z-10 w-full flex-1 flex flex-col items-center ${
           screen === 'playing'
-            ? 'p-1.5 sm:p-3 md:p-4 pt-16 sm:pt-20 md:pt-22 max-w-7xl xl:max-w-[1550px] 2xl:max-w-[1650px] mx-auto h-[100dvh] sm:h-auto sm:min-h-screen overflow-hidden sm:overflow-y-auto custom-scrollbar'
-            : 'px-4 sm:px-6 py-6 max-w-6xl mx-auto justify-center'
+            ? 'p-1.5 sm:p-3 md:p-4 pt-14 sm:pt-20 md:pt-22 max-w-7xl xl:max-w-[1550px] 2xl:max-w-[1650px] mx-auto h-[100dvh] overflow-hidden justify-start'
+            : 'px-2 sm:px-6 py-1 sm:py-6 max-w-6xl mx-auto justify-center min-h-0'
         }`}
       >
         {screen === 'playing' && quizData && (
@@ -1369,7 +1431,7 @@ export default function App() {
               <ThemeSelector
                 language={settings.language}
                 onSelectPreset={handleSelectPreset}
-                onGenerateCustom={(topic, difficulty, mode, style) => generateQuizFromTopic(topic, undefined, difficulty, mode, style)}
+                onGenerateCustom={(topic, difficulty, mode, style, isPub) => generateQuizFromTopic(topic, undefined, difficulty, mode, style, isPub)}
                 selectedMode={settings.gameMode}
                 onSelectMode={(mode) => setSettings(prev => ({ ...prev, gameMode: mode }))}
                 selectedStyle={settings.gameStyle}
@@ -1379,7 +1441,11 @@ export default function App() {
                 onPlayHoverSound={() => soundEngine.playHover()}
                 onOpenJoinRoom={() => {
                   setJoinModalInitialCode('');
+                  setIsJoinModalCodeLocked(false);
                   setIsJoinModalOpen(true);
+                }}
+                onOpenPublicRooms={() => {
+                  setIsPublicRoomsModalOpen(true);
                 }}
               />
               {errorMessage && (
@@ -1464,6 +1530,7 @@ export default function App() {
                 onSendReaction={(emoji) => currentRoomCode && multiplayerService.sendReaction(currentRoomCode, emoji)}
                 onLeaveRoom={handleExitToMenu}
                 onRetryGeneration={() => generateQuizFromTopic(roomState.topic, undefined, roomState.difficulty, roomState.gameMode as any, 'competitive_room')}
+                onTogglePublic={(isPublic) => currentRoomCode && multiplayerService.togglePublicRoom(currentRoomCode, isPublic)}
                 floatingReactions={floatingReactions}
               />
             </motion.div>
@@ -1645,7 +1712,7 @@ export default function App() {
                       </div>
 
                       {/* Cadre Indice Audio (si mode non blind test musical) */}
-                      {settings.gameMode !== 'music_blind_test' && (
+                      {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-md flex items-center justify-center shrink-0">
                           <AudioCluePlayer
                             audioNotes={currentQuestion.audioNotes}
@@ -1653,7 +1720,7 @@ export default function App() {
                             speechEnabled={settings.speechCluesEnabled}
                             primaryColor={quizData.primaryColor}
                             youtubeVideoId={activeVideoId}
-                            gameMode={settings.gameMode}
+                            gameMode={roomState?.gameMode || settings.gameMode}
                             language={roomState?.language || settings.language}
                             volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                           />
@@ -1663,7 +1730,7 @@ export default function App() {
 
                     {/* Colonne Centrale (Mobile & Desktop): Cadre Média UNIQUE */}
                     <div className="w-full md:col-span-6 h-[105px] xs:h-[125px] sm:h-[165px] md:h-[200px] rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-inner relative shrink-0">
-                      {settings.gameMode === 'music_blind_test' ? (
+                      {(roomState?.gameMode || settings.gameMode) === 'music_blind_test' ? (
                         <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
                           {/* Visualiseur musical animé avant réponse */}
                           <div className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-700 ${isAnswered ? 'opacity-0 pointer-events-none' : 'opacity-100 z-10'}`}>
@@ -1764,7 +1831,7 @@ export default function App() {
                       )}
 
                       {/* Cadre Catégorie */}
-                      {settings.gameMode !== 'music_blind_test' && (
+                      {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/10 shadow-md text-center flex flex-row items-center justify-between shrink-0">
                           <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">{t('category', roomState?.language || settings.language)}</span>
                           <span className="text-xs font-bold text-white capitalize truncate max-w-[120px]">{currentQuestion.category}</span>
@@ -1782,7 +1849,7 @@ export default function App() {
                   </div>
 
                   {/* Indice Audio Mobile (si non blind test musical) */}
-                  {settings.gameMode !== 'music_blind_test' && (
+                  {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
                     <div className="md:hidden bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center justify-center shrink-0">
                       <AudioCluePlayer
                         audioNotes={currentQuestion.audioNotes}
@@ -1790,7 +1857,7 @@ export default function App() {
                         speechEnabled={settings.speechCluesEnabled}
                         primaryColor={quizData.primaryColor}
                         youtubeVideoId={activeVideoId}
-                        gameMode={settings.gameMode}
+                        gameMode={roomState?.gameMode || settings.gameMode}
                         language={roomState?.language || settings.language}
                         volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                       />
@@ -1799,26 +1866,45 @@ export default function App() {
                 </div>
 
                 {/* 2. BAS DU CONTENEUR: Question & Choix de réponses */}
-                <div className="w-full flex flex-col gap-1.5 sm:gap-2 shrink-0 mt-0.5">
-                  {/* Titre de la question sur une seule ligne avec défilement horizontal si trop long */}
-                  <div className="px-1 text-center shrink-0 overflow-hidden">
-                    {currentQuestion.question.length > 100 ? (
-                      <div className="w-full overflow-hidden whitespace-nowrap relative">
-                        <h2
-                          className="animate-marquee-smooth inline-block text-xs sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md px-2"
-                          style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-                        >
-                          {currentQuestion.question} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {currentQuestion.question}
-                        </h2>
-                      </div>
-                    ) : (
-                      <h2
-                        className="text-xs sm:text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                <div className="w-full flex flex-col gap-1 sm:gap-2 shrink-0 mt-0.5">
+                  {/* Titre de la question : défilement continu permanent sur smartphone, conditionnel sur desktop */}
+                  <div className="px-1 text-center shrink-0 overflow-hidden w-full">
+                    {/* Mobile / Smartphone : défilement continu permanent */}
+                    <div className="md:hidden w-full overflow-hidden whitespace-nowrap relative py-0.5">
+                      <div
+                        className="animate-marquee-smooth inline-block text-xs sm:text-sm font-black text-white leading-tight font-heading drop-shadow-md px-2"
                         style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
                       >
-                        {currentQuestion.question}
-                      </h2>
-                    )}
+                        <span>{currentQuestion.question}</span>
+                        <span className="inline-block mx-6 text-purple-400 font-bold opacity-60">•</span>
+                        <span>{currentQuestion.question}</span>
+                        <span className="inline-block mx-6 text-purple-400 font-bold opacity-60">•</span>
+                        <span>{currentQuestion.question}</span>
+                      </div>
+                    </div>
+
+                    {/* Écrans moyens et Desktop */}
+                    <div className="hidden md:block">
+                      {currentQuestion.question.length > 80 ? (
+                        <div className="w-full overflow-hidden whitespace-nowrap relative">
+                          <h2
+                            className="animate-marquee-smooth inline-block text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md px-2"
+                            style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
+                          >
+                            <span>{currentQuestion.question}</span>
+                            <span className="inline-block mx-8 text-purple-400 font-bold opacity-60">•</span>
+                            <span>{currentQuestion.question}</span>
+                          </h2>
+                        </div>
+                      ) : (
+                        <h2
+                          className="text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis px-1"
+                          style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
+                        >
+                          {currentQuestion.question}
+                        </h2>
+                      )}
+                    </div>
                   </div>
 
                   {/* Cadre des réponses */}
@@ -1910,15 +1996,39 @@ export default function App() {
       <JoinRoomModal
         language={settings.language}
         isOpen={isJoinModalOpen}
+        isCodeLocked={isJoinModalCodeLocked}
         onClose={() => setIsJoinModalOpen(false)}
         onJoinRoom={(code, name, avatar) => {
           setIsJoiningRoom(true);
           setJoinErrorMessage(null);
           multiplayerService.joinRoom({ code, playerName: name, avatar });
         }}
+        onOpenPublicRooms={() => {
+          setIsJoinModalOpen(false);
+          setIsPublicRoomsModalOpen(true);
+        }}
         initialCode={joinModalInitialCode}
         isJoining={isJoiningRoom}
         errorMessage={joinErrorMessage}
+      />
+
+      {/* Public Rooms Modal */}
+      <PublicRoomsModal
+        language={settings.language}
+        isOpen={isPublicRoomsModalOpen}
+        onClose={() => setIsPublicRoomsModalOpen(false)}
+        onSelectRoom={(room) => {
+          setIsPublicRoomsModalOpen(false);
+          setJoinModalInitialCode(room.code);
+          setIsJoinModalCodeLocked(true);
+          setIsJoinModalOpen(true);
+        }}
+        onOpenEnterCodeModal={() => {
+          setIsPublicRoomsModalOpen(false);
+          setJoinModalInitialCode('');
+          setIsJoinModalCodeLocked(false);
+          setIsJoinModalOpen(true);
+        }}
       />
 
       {/* Settings Modal */}
@@ -1933,10 +2043,50 @@ export default function App() {
         onUpdatePlayerProfile={handleUpdateProfile}
       />
 
-      {/* Subtle Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
+      {/* Live Statistics Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
       {screen !== 'playing' && (
-        <footer className="relative z-10 py-3 text-center text-xs text-white/40 border-t border-white/10 backdrop-blur-md">
-          <span>{t('footer_text', settings.language)}</span>
+        <footer className="relative z-10 py-1.5 sm:py-2.5 px-2 sm:px-4 text-center border-t border-white/10 backdrop-blur-md bg-black/40 shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-7 gap-y-0.5 text-[10px] sm:text-xs text-white/70">
+            {/* Joueurs en direct */}
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-extrabold text-emerald-400 text-sm tracking-tight">
+                {globalStats.onlinePlayers.toLocaleString()}
+              </span>
+              <span className="text-white/60 font-medium">
+                {t('online_players_label', settings.language)}
+              </span>
+            </div>
+
+            <span className="text-white/20 hidden sm:inline">•</span>
+
+            {/* Salons en cours */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">🎮</span>
+              <span className="font-extrabold text-amber-300 text-sm tracking-tight">
+                {globalStats.activeRooms.toLocaleString()}
+              </span>
+              <span className="text-white/60 font-medium">
+                {t('active_rooms_label', settings.language)}
+              </span>
+            </div>
+
+            <span className="text-white/20 hidden sm:inline">•</span>
+
+            {/* Quiz générés au total */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm text-indigo-400">✨</span>
+              <span className="font-extrabold text-indigo-300 text-sm tracking-tight">
+                {globalStats.totalGenerations.toLocaleString()}
+              </span>
+              <span className="text-white/60 font-medium">
+                {t('total_quizzes_label', settings.language)}
+              </span>
+            </div>
+          </div>
         </footer>
       )}
     </div>

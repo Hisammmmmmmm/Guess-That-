@@ -152,6 +152,7 @@ class MultiplayerService {
     gameMode: string;
     language: string;
     durationPerQuestion: number;
+    isPublic?: boolean;
   }) {
     await this.connect();
     this.send({
@@ -235,18 +236,62 @@ class MultiplayerService {
     }
   }
 
+  public updateRoomSettings(params: {
+    code?: string;
+    gameMode?: string;
+    difficulty?: string;
+    durationPerQuestion?: number;
+  }) {
+    const targetCode = params.code || this.currentRoomCode;
+    if (targetCode) {
+      this.send({
+        type: 'update_room_settings',
+        code: targetCode,
+        playerId: this.currentPlayerId,
+        ...params,
+      });
+    }
+  }
+
   public restartRoom(code: string) {
     this.send({ type: 'restart_room', code });
   }
 
-  public restartWithQuiz(code: string, quizData: any) {
-    this.send({ type: 'restart_with_quiz', code, quizData });
+  public restartWithQuiz(code: string, quizData: any, options?: { gameMode?: string; difficulty?: string }) {
+    this.send({
+      type: 'restart_with_quiz',
+      code,
+      quizData,
+      gameMode: options?.gameMode,
+      difficulty: options?.difficulty,
+    });
   }
 
   public leaveRoom(code: string) {
     this.send({ type: 'leave_room', code });
     this.currentRoomCode = null;
     this.currentPlayerId = null;
+  }
+
+  public togglePublicRoom(code: string, isPublic: boolean) {
+    this.send({
+      type: 'toggle_public_room',
+      code,
+      playerId: this.currentPlayerId,
+      isPublic,
+    });
+  }
+
+  public requestPublicRooms(language?: string, gameMode?: string) {
+    this.send({
+      type: 'get_public_rooms',
+      language,
+      gameMode,
+    });
+  }
+
+  public requestStats() {
+    this.send({ type: 'get_stats' });
   }
 }
 

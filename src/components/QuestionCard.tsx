@@ -70,8 +70,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
   return (
     <div className="flex flex-col gap-1.5 sm:gap-2.5 w-full min-h-0 shrink-0" id="question-card-container">
-      {/* 4 Choices Grid with Immersive Glass Buttons - 2x2 Responsive Grid */}
-      <div className="grid grid-cols-2 gap-1.5 sm:gap-2.5 w-full transition-all duration-300" id="options-grid">
+      {/* 4 Choices Grid with Immersive Glass Buttons - 4 rows on mobile portrait, 2x2 Responsive Grid on sm/desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2.5 w-full transition-all duration-300" id="options-grid">
         {question.options.map((option, idx) => {
           const letter = optionLetters[idx] || `${idx + 1}`;
           const isSelected = selectedOption === option;
@@ -112,7 +112,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               onClick={() => !isLocked && gameStyle !== 'slideshow' && onSelectOption(option)}
               onMouseEnter={() => !isLocked && onHoverSound?.()}
               disabled={isLocked || gameStyle === 'slideshow'}
-              className={`group relative min-h-[38px] sm:min-h-[44px] border rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between transition-all duration-150 text-left ${btnClasses} ${
+              className={`group relative min-h-[34px] sm:min-h-[44px] border rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1 sm:py-2 flex items-center justify-between transition-all duration-150 text-left ${btnClasses} ${
                 !isLocked && gameStyle !== 'slideshow' ? 'cursor-pointer active:scale-[0.98] transform hover:scale-[1.005]' : ''
               }`}
             >

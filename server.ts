@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { generateDynamicFallbackQuiz } from './src/data/fallbackGenerator';
+import { BOT_ROOMS_DATA, BotRoomConfig } from './server/botRoomsData';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,7 @@ interface ServerPlayer {
   selectedOption?: string;
   timeSpent?: number;
   isHost: boolean;
+  isBot?: boolean;
   lastScoreEarned?: number;
   answersHistory?: Record<number, { selectedOption: string; isCorrect: boolean; timeSpent: number; scoreEarned: number }>;
   ws?: WebSocket;
@@ -46,6 +48,10 @@ interface ServerRoom {
   questionStartTime: number;
   quizData: any;
   newQuizReady?: boolean;
+  isPublic?: boolean;
+  isBotRoom?: boolean;
+  botConfig?: BotRoomConfig;
+  botTimers?: NodeJS.Timeout[];
   players: Map<string, ServerPlayer>;
   createdAt: number;
   autoNextTimer?: any;
@@ -53,6 +59,71 @@ interface ServerRoom {
 
 // In-memory active rooms map
 const activeRooms = new Map<string, ServerRoom>();
+
+// Global statistics tracker
+let totalGenerations = 1842;
+const connectedSockets = new Set<WebSocket>();
+
+function getGlobalStats() {
+  let totalBots = 0;
+  activeRooms.forEach((room) => {
+    room.players.forEach((p) => {
+      if (p.isBot) {
+        totalBots += 1;
+      }
+    });
+  });
+
+  return {
+    onlinePlayers: Math.max(1, connectedSockets.size + totalBots),
+    activeRooms: activeRooms.size,
+    totalGenerations,
+  };
+}
+
+function broadcastGlobalStats() {
+  const stats = getGlobalStats();
+  const msg = JSON.stringify({ type: 'global_stats', stats });
+  connectedSockets.forEach((sock) => {
+    if (sock.readyState === WebSocket.OPEN) {
+      sock.send(msg);
+    }
+  });
+}
+
+function getPublicRoomsSummary(filterLang?: string, filterMode?: string) {
+  const list: any[] = [];
+  activeRooms.forEach((room) => {
+    if (room.isPublic === false) return;
+    if (filterLang && filterLang !== 'all' && room.language !== filterLang) return;
+    if (filterMode && filterMode !== 'all' && room.gameMode !== filterMode) return;
+
+    const hostPlayer = room.players.get(room.hostId);
+    list.push({
+      code: room.code,
+      hostName: hostPlayer?.name || 'Hôte',
+      hostAvatar: hostPlayer?.avatar || '👑',
+      themeTitle: room.themeTitle,
+      topic: room.topic,
+      gameMode: room.gameMode,
+      difficulty: room.difficulty,
+      language: room.language,
+      playerCount: room.players.size,
+      maxPlayers: 8,
+      status: room.status,
+      isPublic: true,
+      isBotRoom: Boolean(room.isBotRoom),
+      currentQuestionIndex: room.currentQuestionIndex,
+      totalQuestions: room.quizData?.questions?.length || 0,
+    });
+  });
+
+  // Sort: real human rooms first, then by player count descending
+  return list.sort((a, b) => {
+    if (a.isBotRoom !== b.isBotRoom) return a.isBotRoom ? 1 : -1;
+    return b.playerCount - a.playerCount;
+  });
+}
 
 function serializeRoom(room: ServerRoom) {
   const playersObj: Record<string, any> = {};
@@ -69,6 +140,7 @@ function serializeRoom(room: ServerRoom) {
       selectedOption: room.status === 'question_result' || room.status === 'game_over' ? p.selectedOption : undefined,
       timeSpent: p.timeSpent,
       isHost: p.isHost,
+      isBot: p.isBot,
       lastScoreEarned: p.lastScoreEarned,
       answersHistory: p.answersHistory || {},
     };
@@ -92,6 +164,8 @@ function serializeRoom(room: ServerRoom) {
     questionStartTime: room.questionStartTime,
     quizData: room.quizData,
     newQuizReady: room.newQuizReady,
+    isPublic: room.isPublic ?? true,
+    isBotRoom: Boolean(room.isBotRoom),
     players: playersObj,
   };
 }
@@ -126,6 +200,280 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
+
+  // Global platform statistics endpoint
+  app.get('/api/stats', (req, res) => {
+    res.json(getGlobalStats());
+  });
+
+  // Public rooms discovery endpoint with language and gameMode filters
+  app.get('/api/public-rooms', (req, res) => {
+    const lang = typeof req.query.language === 'string' ? req.query.language : undefined;
+    const mode = typeof req.query.gameMode === 'string' ? req.query.gameMode : undefined;
+    res.json({ rooms: getPublicRoomsSummary(lang, mode) });
+  });
+
+  // Bot Rooms Autonomous Cycle Functions
+  function runBotRoomCycle(room: ServerRoom) {
+    if (room.autoNextTimer) {
+      clearTimeout(room.autoNextTimer);
+      room.autoNextTimer = null;
+    }
+    if (room.botTimers) {
+      room.botTimers.forEach(t => clearTimeout(t));
+      room.botTimers = [];
+    }
+
+    room.status = 'lobby';
+    room.currentQuestionIndex = 0;
+    room.players.forEach(p => {
+      p.score = 0;
+      p.streak = 0;
+      p.maxStreak = 0;
+      p.answeredCurrent = false;
+      p.isCorrect = undefined;
+      p.selectedOption = undefined;
+      p.lastScoreEarned = 0;
+      p.answersHistory = {};
+    });
+
+    broadcastToRoom(room, { type: 'room_state', room: serializeRoom(room) });
+    broadcastToRoom(room, { type: 'room_updated', room: serializeRoom(room) });
+
+    // Wait 8s in lobby then start question 0
+    room.autoNextTimer = setTimeout(() => {
+      startBotRoomQuestion(room, 0);
+    }, 8000);
+  }
+
+  function startBotRoomQuestion(room: ServerRoom, qIndex: number) {
+    if (room.autoNextTimer) {
+      clearTimeout(room.autoNextTimer);
+      room.autoNextTimer = null;
+    }
+    if (room.botTimers) {
+      room.botTimers.forEach(t => clearTimeout(t));
+      room.botTimers = [];
+    }
+
+    const questions = room.quizData?.questions || [];
+    if (qIndex >= questions.length || !questions[qIndex]) {
+      finishBotRoomGame(room);
+      return;
+    }
+
+    const currentQ = questions[qIndex];
+    room.status = 'playing';
+    room.currentQuestionIndex = qIndex;
+    room.questionStartTime = Date.now();
+
+    room.players.forEach(p => {
+      p.answeredCurrent = false;
+      p.isCorrect = undefined;
+      p.selectedOption = undefined;
+      p.lastScoreEarned = 0;
+    });
+
+    const serialized = serializeRoom(room);
+    broadcastToRoom(room, { type: 'next_question_started', room: serialized });
+    broadcastToRoom(room, { type: 'room_state', room: serialized });
+    broadcastToRoom(room, { type: 'room_updated', room: serialized });
+
+    // Schedule bots answering with realistic human-like delays
+    if (room.botConfig?.bots) {
+      room.botConfig.bots.forEach((botConf) => {
+        const botPlayer = room.players.get(botConf.id);
+        if (!botPlayer) return;
+
+        const delaySec = botConf.speedMin + Math.random() * (botConf.speedMax - botConf.speedMin);
+        const delayMs = Math.round(delaySec * 1000);
+
+        const timer = setTimeout(() => {
+          if (room.status !== 'playing' || room.currentQuestionIndex !== qIndex) return;
+          if (botPlayer.answeredCurrent) return;
+
+          const isCorrect = Math.random() < botConf.accuracy;
+          let selectedOption = currentQ.correctAnswer;
+          if (!isCorrect) {
+            const wrongOptions = currentQ.options.filter((o: string) => o !== currentQ.correctAnswer);
+            selectedOption = wrongOptions[Math.floor(Math.random() * wrongOptions.length)] || currentQ.options[0];
+          }
+
+          let earned = 0;
+          if (isCorrect) {
+            botPlayer.streak += 1;
+            if (botPlayer.streak > botPlayer.maxStreak) botPlayer.maxStreak = botPlayer.streak;
+            let multiplier = 1.0;
+            if (botPlayer.streak >= 5) multiplier = 3.0;
+            else if (botPlayer.streak >= 3) multiplier = 2.0;
+            else if (botPlayer.streak >= 2) multiplier = 1.5;
+
+            const speedRatio = Math.max(0, 1 - (delaySec / (room.durationPerQuestion || 15)));
+            const basePoints = 500 + Math.round(500 * speedRatio);
+            earned = Math.round(basePoints * multiplier);
+            botPlayer.score += earned;
+          } else {
+            botPlayer.streak = 0;
+          }
+
+          botPlayer.answeredCurrent = true;
+          botPlayer.isCorrect = isCorrect;
+          botPlayer.selectedOption = selectedOption;
+          botPlayer.timeSpent = Math.round(delaySec * 10) / 10;
+          botPlayer.lastScoreEarned = earned;
+          if (!botPlayer.answersHistory) botPlayer.answersHistory = {};
+          botPlayer.answersHistory[qIndex] = {
+            selectedOption,
+            isCorrect,
+            timeSpent: botPlayer.timeSpent,
+            scoreEarned: earned,
+          };
+
+          broadcastToRoom(room, {
+            type: 'player_answered',
+            playerId: botPlayer.id,
+            room: serializeRoom(room),
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serializeRoom(room),
+          });
+
+          // Check if all players (humans + bots) have answered
+          let allDone = true;
+          room.players.forEach(p => {
+            if (!p.answeredCurrent) allDone = false;
+          });
+          if (allDone) {
+            revealBotRoomQuestion(room, qIndex);
+          }
+        }, delayMs);
+
+        room.botTimers?.push(timer);
+      });
+    }
+
+    // Question duration timeout (15s duration + buffer)
+    room.autoNextTimer = setTimeout(() => {
+      if (room.status === 'playing' && room.currentQuestionIndex === qIndex) {
+        revealBotRoomQuestion(room, qIndex);
+      }
+    }, ((room.durationPerQuestion || 15) * 1000) + 400);
+  }
+
+  function revealBotRoomQuestion(room: ServerRoom, qIndex: number) {
+    if (room.status === 'question_result' || room.status === 'game_over') return;
+    if (room.autoNextTimer) {
+      clearTimeout(room.autoNextTimer);
+      room.autoNextTimer = null;
+    }
+    if (room.botTimers) {
+      room.botTimers.forEach(t => clearTimeout(t));
+      room.botTimers = [];
+    }
+
+    room.status = 'question_result';
+    const serialized = serializeRoom(room);
+    broadcastToRoom(room, { type: 'question_revealed', room: serialized });
+    broadcastToRoom(room, { type: 'room_state', room: serialized });
+    broadcastToRoom(room, { type: 'room_updated', room: serialized });
+
+    // 5s reveal delay before next question
+    room.autoNextTimer = setTimeout(() => {
+      const questions = room.quizData?.questions || [];
+      if (qIndex + 1 < questions.length) {
+        startBotRoomQuestion(room, qIndex + 1);
+      } else {
+        finishBotRoomGame(room);
+      }
+    }, 5000);
+  }
+
+  function finishBotRoomGame(room: ServerRoom) {
+    if (room.autoNextTimer) {
+      clearTimeout(room.autoNextTimer);
+      room.autoNextTimer = null;
+    }
+    if (room.botTimers) {
+      room.botTimers.forEach(t => clearTimeout(t));
+      room.botTimers = [];
+    }
+
+    room.status = 'game_over';
+    const serialized = serializeRoom(room);
+    broadcastToRoom(room, { type: 'game_over', room: serialized });
+    broadcastToRoom(room, { type: 'room_state', room: serialized });
+    broadcastToRoom(room, { type: 'room_updated', room: serialized });
+
+    // 8s leaderboard display then restart the infinite loop in lobby
+    room.autoNextTimer = setTimeout(() => {
+      runBotRoomCycle(room);
+    }, 8000);
+  }
+
+  function initBotRooms() {
+    BOT_ROOMS_DATA.forEach((config) => {
+      const hostBot = config.bots[0];
+      const players = new Map<string, ServerPlayer>();
+
+      config.bots.forEach((bot, index) => {
+        players.set(bot.id, {
+          id: bot.id,
+          name: bot.name,
+          avatar: bot.avatar,
+          score: 0,
+          streak: 0,
+          maxStreak: 0,
+          answeredCurrent: false,
+          isHost: index === 0,
+          isBot: true,
+          lastScoreEarned: 0,
+          answersHistory: {},
+        });
+      });
+
+      const quizData = {
+        themeTitle: config.themeTitle,
+        topic: config.topic,
+        themeBgImage: config.themeBgImage,
+        primaryColor: config.primaryColor,
+        accentColor: config.accentColor,
+        ambientSound: config.ambientSound,
+        questions: config.questions,
+      };
+
+      const room: ServerRoom = {
+        code: config.code,
+        hostId: hostBot.id,
+        status: 'lobby',
+        topic: config.topic,
+        themeTitle: config.themeTitle,
+        themeBgImage: config.themeBgImage,
+        primaryColor: config.primaryColor,
+        accentColor: config.accentColor,
+        difficulty: config.difficulty,
+        gameMode: config.gameMode,
+        gameStyle: 'competitive_room',
+        language: config.language,
+        durationPerQuestion: 15,
+        currentQuestionIndex: 0,
+        questionStartTime: 0,
+        quizData,
+        isPublic: true,
+        isBotRoom: true,
+        botConfig: config,
+        botTimers: [],
+        players,
+        createdAt: Date.now(),
+      };
+
+      activeRooms.set(config.code, room);
+      runBotRoomCycle(room);
+    });
+  }
+
+  // Initialize bot rooms at server boot
+  initBotRooms();
 
   // In-memory cache for YouTube searches to make audio instant
   const ytCache = new Map<string, { videoId: string; title: string; videoIds?: string[] }>();
@@ -743,6 +1091,10 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
       parsedData.quotaExceededNotice = quotaExceededNotice;
       parsedData.fallbackUsed = quotaExceededNotice;
 
+      // Update total generations statistic & broadcast
+      totalGenerations += 1;
+      broadcastGlobalStats();
+
       return res.json(parsedData);
     } catch (err: any) {
       console.error('Error generating quiz, engaging emergency safety fallback:', err);
@@ -755,6 +1107,10 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
         );
         emergencyData.quotaExceededNotice = true;
         emergencyData.fallbackUsed = true;
+
+        totalGenerations += 1;
+        broadcastGlobalStats();
+
         return res.json(emergencyData);
       } catch (fallbackErr) {
         const isQuota = err.message?.includes('resource_exhausted') || err.message?.includes('Quota exceeded') || err.message?.includes('429');
@@ -791,6 +1147,11 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
 
   // WebSocket Multiplayer Server Logic
   wss.on('connection', (ws) => {
+    connectedSockets.add(ws);
+    // Send immediate global stats to newly connected client
+    ws.send(JSON.stringify({ type: 'global_stats', stats: getGlobalStats() }));
+    broadcastGlobalStats();
+
     let clientRoomCode: string | null = null;
     let clientPlayerId: string | null = null;
 
@@ -880,7 +1241,7 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
 
         // CREATE ROOM
         if (type === 'create_room') {
-          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', language = 'fr', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
+          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', language = 'fr', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20, isPublic = true } = data;
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -917,6 +1278,7 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
             currentQuestionIndex: 0,
             questionStartTime: 0,
             quizData,
+            isPublic: isPublic !== false,
             players: new Map([[hostId, hostPlayer]]),
             createdAt: Date.now(),
           };
@@ -925,12 +1287,43 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
           clientRoomCode = code;
           clientPlayerId = hostId;
 
+          broadcastGlobalStats();
+
           ws.send(JSON.stringify({
             type: 'room_created',
             code,
             playerId: hostId,
             room: serializeRoom(newRoom),
           }));
+        }
+
+        // GET PUBLIC ROOMS
+        else if (type === 'get_public_rooms') {
+          const { language, gameMode } = data;
+          ws.send(JSON.stringify({
+            type: 'public_rooms_list',
+            rooms: getPublicRoomsSummary(language, gameMode),
+          }));
+        }
+
+        // TOGGLE PUBLIC ROOM (Host toggles public listing)
+        else if (type === 'toggle_public_room') {
+          const { code: rawCode, isPublic } = data;
+          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
+          const room = activeRooms.get(code);
+          if (!room) return;
+          if (clientPlayerId && clientPlayerId !== room.hostId) return;
+
+          room.isPublic = Boolean(isPublic);
+          const serialized = serializeRoom(room);
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serialized,
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serialized,
+          });
         }
 
         // JOIN ROOM
@@ -1061,18 +1454,41 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
 
         // SUBMIT ANSWER
         else if (type === 'submit_answer') {
-          const { code: rawCode, questionIndex, selectedOption, timeSpent = 0 } = data;
+          const { code: rawCode, questionIndex, selectedOption, timeSpent = 0, playerId: passedPlayerId } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
-          if (!room || !clientPlayerId) return;
+          if (!room) return;
 
-          const player = room.players.get(clientPlayerId);
-          if (!player || player.answeredCurrent) return;
+          const effectivePlayerId = passedPlayerId || clientPlayerId;
+          if (!effectivePlayerId) return;
 
-          const currentQ = room.quizData?.questions?.[questionIndex];
+          let player = room.players.get(effectivePlayerId);
+          if (!player) {
+            // Check if player ID matches any player in the room or socket
+            for (const [id, p] of room.players.entries()) {
+              if (id === effectivePlayerId || p.ws === ws) {
+                player = p;
+                break;
+              }
+            }
+          }
+          if (!player) return;
+
+          // Re-associate socket and IDs
+          player.ws = ws;
+          clientPlayerId = player.id;
+          clientRoomCode = code;
+
+          if (player.answeredCurrent) return;
+
+          const qIdx = (typeof questionIndex === 'number' && questionIndex >= 0)
+            ? questionIndex
+            : room.currentQuestionIndex;
+          const currentQ = room.quizData?.questions?.[qIdx] || room.quizData?.questions?.[room.currentQuestionIndex];
           if (!currentQ) return;
 
-          const isCorrect = selectedOption === currentQ.correctAnswer;
+          const normalizeStr = (s: any) => (s || '').toString().trim().toLowerCase();
+          const isCorrect = normalizeStr(selectedOption) === normalizeStr(currentQ.correctAnswer);
           let earned = 0;
 
           if (isCorrect) {
@@ -1087,7 +1503,9 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
             else if (player.streak >= 2) multiplier = 1.5;
 
             // Speed bonus: from 500 to 1000 base
-            const speedRatio = Math.max(0, 1 - (timeSpent / (room.durationPerQuestion || 20)));
+            const duration = room.durationPerQuestion || 15;
+            const validTimeSpent = typeof timeSpent === 'number' ? Math.max(0.1, timeSpent) : 1;
+            const speedRatio = Math.max(0, 1 - (validTimeSpent / duration));
             const basePoints = 500 + Math.round(500 * speedRatio);
             earned = Math.round(basePoints * multiplier);
             player.score += earned;
@@ -1098,28 +1516,23 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
           player.answeredCurrent = true;
           player.isCorrect = isCorrect;
           player.selectedOption = selectedOption;
-          player.timeSpent = timeSpent;
+          player.timeSpent = typeof timeSpent === 'number' ? Math.round(timeSpent * 10) / 10 : 1;
           player.lastScoreEarned = earned;
 
           if (!player.answersHistory) player.answersHistory = {};
-          player.answersHistory[questionIndex] = {
+          player.answersHistory[qIdx] = {
             selectedOption: selectedOption || '',
             isCorrect,
-            timeSpent,
+            timeSpent: player.timeSpent,
             scoreEarned: earned,
           };
 
-          // Check if all connected players in room have submitted an answer
-          let allAnswered = true;
-          room.players.forEach((p) => {
-            if (p.ws && p.ws.readyState === WebSocket.OPEN && !p.answeredCurrent) {
-              allAnswered = false;
-            }
-          });
-
-          if (allAnswered) {
-            triggerRevealQuestion(room);
-          } else {
+          if (room.isBotRoom) {
+            broadcastToRoom(room, {
+              type: 'player_answered',
+              playerId: player.id,
+              room: serializeRoom(room),
+            });
             broadcastToRoom(room, {
               type: 'room_state',
               room: serializeRoom(room),
@@ -1128,6 +1541,41 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
               type: 'room_updated',
               room: serializeRoom(room),
             });
+
+            // Check if all players (bots + humans) have answered
+            let allDone = true;
+            room.players.forEach((p) => {
+              if (!p.answeredCurrent) allDone = false;
+            });
+            if (allDone) {
+              revealBotRoomQuestion(room, qIdx);
+            }
+          } else {
+            // Check if all connected players in room have submitted an answer
+            let allAnswered = true;
+            room.players.forEach((p) => {
+              if (p.ws && p.ws.readyState === WebSocket.OPEN && !p.answeredCurrent) {
+                allAnswered = false;
+              }
+            });
+
+            if (allAnswered) {
+              triggerRevealQuestion(room);
+            } else {
+              broadcastToRoom(room, {
+                type: 'player_answered',
+                playerId: player.id,
+                room: serializeRoom(room),
+              });
+              broadcastToRoom(room, {
+                type: 'room_state',
+                room: serializeRoom(room),
+              });
+              broadcastToRoom(room, {
+                type: 'room_updated',
+                room: serializeRoom(room),
+              });
+            }
           }
         }
 
@@ -1161,6 +1609,28 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
             room: serializeRoom(room),
             playerId: targetPlayerId,
           }));
+        }
+
+        // UPDATE ROOM SETTINGS (Host changes gameMode, difficulty, duration)
+        else if (type === 'update_room_settings') {
+          const { code: rawCode, gameMode, difficulty, durationPerQuestion } = data;
+          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
+          const room = activeRooms.get(code);
+          if (!room || clientPlayerId !== room.hostId) return;
+
+          if (gameMode) room.gameMode = gameMode;
+          if (difficulty) room.difficulty = difficulty;
+          if (durationPerQuestion) room.durationPerQuestion = durationPerQuestion;
+
+          const serialized = serializeRoom(room);
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serialized,
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serialized,
+          });
         }
 
         // UPDATE PLAYER PROFILE (Host or Guest)
@@ -1255,10 +1725,13 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
 
         // RESTART WITH NEW QUIZ TOPIC
         else if (type === 'restart_with_quiz') {
-          const { code: rawCode, quizData } = data;
+          const { code: rawCode, quizData, gameMode, difficulty } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
           if (!room || clientPlayerId !== room.hostId) return;
+
+          if (gameMode) room.gameMode = gameMode;
+          if (difficulty) room.difficulty = difficulty;
 
           if (quizData) {
             room.quizData = quizData;
@@ -1287,6 +1760,10 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
             type: 'room_state',
             room: serializeRoom(room),
           });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serializeRoom(room),
+          });
         }
 
         // LEAVE ROOM
@@ -1297,10 +1774,11 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
           if (!room || !clientPlayerId) return;
 
           room.players.delete(clientPlayerId);
-          if (room.players.size === 0) {
+          if (room.players.size === 0 && !room.isBotRoom) {
             activeRooms.delete(code);
+            broadcastGlobalStats();
           } else {
-            if (room.hostId === clientPlayerId) {
+            if (room.hostId === clientPlayerId && !room.isBotRoom) {
               // Assign new host
               const nextHostId = room.players.keys().next().value;
               if (nextHostId) {
@@ -1317,12 +1795,20 @@ DOUBLE CHECK: Ensure all text (questions, options, correctAnswer, trivia, clues,
           clientRoomCode = null;
           clientPlayerId = null;
         }
+
+        // GET STATS
+        else if (type === 'get_stats') {
+          ws.send(JSON.stringify({ type: 'global_stats', stats: getGlobalStats() }));
+        }
       } catch (err) {
         console.error('WebSocket message parsing error:', err);
       }
     });
 
     ws.on('close', () => {
+      connectedSockets.delete(ws);
+      broadcastGlobalStats();
+
       if (clientRoomCode && clientPlayerId) {
         const room = activeRooms.get(clientRoomCode);
         if (room) {

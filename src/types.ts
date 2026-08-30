@@ -96,7 +96,27 @@ export interface RoomState {
   questionStartTime: number;
   quizData?: QuizData | null;
   newQuizReady?: boolean;
+  isPublic?: boolean;
+  isBotRoom?: boolean;
   players: Record<string, RoomPlayer>;
+}
+
+export interface PublicRoomSummary {
+  code: string;
+  hostName: string;
+  hostAvatar: string;
+  themeTitle: string;
+  topic: string;
+  gameMode: GameMode;
+  difficulty: GameDifficulty;
+  language: string;
+  playerCount: number;
+  maxPlayers: number;
+  status: 'lobby' | 'playing' | 'question_result' | 'game_over';
+  isPublic: boolean;
+  isBotRoom?: boolean;
+  currentQuestionIndex?: number;
+  totalQuestions?: number;
 }
 
 export interface GameSettings {
@@ -133,6 +153,12 @@ export interface GameStats {
   totalQuestions: number;
   totalTimeSpent: number;
   answers: PlayerAnswer[];
+}
+
+export interface GlobalStats {
+  onlinePlayers: number;
+  activeRooms: number;
+  totalGenerations: number;
 }
 
 export type GameScreen = 'menu' | 'generating' | 'ready' | 'playing' | 'results' | 'settings' | 'room_lobby' | 'room_results';

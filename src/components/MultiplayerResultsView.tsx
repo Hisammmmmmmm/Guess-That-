@@ -12,12 +12,17 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  HelpCircle,
+  Headphones,
+  Eye,
+  Check,
+  CheckCircle2,
+  Radio,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { RoomState, RoomPlayer } from '../types';
+import { RoomState, RoomPlayer, GameMode } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { multiplayerService } from '../services/multiplayerService';
-
 import { t } from '../i18n/translations';
 
 interface MultiplayerResultsViewProps {
@@ -33,6 +38,33 @@ interface MultiplayerResultsViewProps {
   onSendReaction?: (emoji: string) => void;
 }
 
+const MODE_SUGGESTIONS: Record<GameMode, string[]> = {
+  quiz: [
+    '🎬 Blockbusters 90s',
+    '🧙 Harry Potter & Magie',
+    '⚡ Marvel & Super-Héros',
+    '🍙 Mangas & Anime',
+    '🌍 Géographie & Capitales',
+    '🍕 Séries & Sitcoms',
+  ],
+  music_blind_test: [
+    '🎸 Rock Légendaire',
+    '🎹 OST Jeux Vidéo & Retro',
+    '🎤 Pop & Hits des Années 2000',
+    '🎬 Musiques de Films Cultes',
+    '✨ Dessins Animés Disney',
+    '🔥 Rap Français & US',
+  ],
+  visual_blind_test: [
+    '🦁 Animaux Sauvages & Faune',
+    '🗼 Monuments & Merveilles',
+    '🎮 Logos & Héros de Jeux',
+    '🎨 Peintures & Art',
+    '🚗 Voitures & Marques Cultes',
+    '🍕 Gastronomie & Spécialités',
+  ],
+};
+
 export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
   language = 'fr',
   roomState,
@@ -45,9 +77,17 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
   onExitToMenu,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<GameMode>((roomState.gameMode as GameMode) || 'quiz');
   const [newTopicInput, setNewTopicInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
+
+  // Sync mode if updated externally (e.g. host changed mode while guest is watching)
+  useEffect(() => {
+    if (roomState.gameMode && roomState.gameMode !== selectedMode) {
+      setSelectedMode(roomState.gameMode as GameMode);
+    }
+  }, [roomState.gameMode]);
 
   const playersList: RoomPlayer[] = Object.values(roomState.players || {});
   const sortedPlayers = [...playersList].sort((a, b) => b.score - a.score);
@@ -75,8 +115,19 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleGenerateNewQuiz = async () => {
-    if (!newTopicInput.trim() || isGenerating) return;
+  const handleSelectMode = (mode: GameMode) => {
+    if (!isHost || isGenerating) return;
+    onPlayClickSound?.();
+    setSelectedMode(mode);
+    multiplayerService.updateRoomSettings({
+      code: roomState.code,
+      gameMode: mode,
+    });
+  };
+
+  const handleGenerateNewQuiz = async (topicOverride?: string) => {
+    const topicToUse = (topicOverride || newTopicInput).trim();
+    if (!topicToUse || isGenerating) return;
     setIsGenerating(true);
     onPlayClickSound?.();
     try {
@@ -84,10 +135,10 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: newTopicInput.trim(),
+          topic: topicToUse,
           difficulty: roomState.difficulty || 'medium',
           language: roomState.language || language,
-          gameMode: roomState.gameMode || 'quiz',
+          gameMode: selectedMode,
         }),
       });
       const rawText = await response.text();
@@ -110,7 +161,10 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
           id: idx + 1,
         })),
       };
-      multiplayerService.restartWithQuiz(roomState.code, preparedData);
+      multiplayerService.restartWithQuiz(roomState.code, preparedData, {
+        gameMode: selectedMode,
+        difficulty: roomState.difficulty || 'medium',
+      });
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'Erreur lors de la génération du nouveau quiz.');
@@ -118,6 +172,38 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
       setIsGenerating(false);
     }
   };
+
+  const modesConfig: { id: GameMode; title: string; subtitle: string; icon: React.ReactNode; color: string; activeBorder: string; activeBg: string }[] = [
+    {
+      id: 'quiz',
+      title: t('mode_quiz_title', language),
+      subtitle: t('mode_quiz_desc', language),
+      icon: <HelpCircle className="w-5 h-5 text-blue-400" />,
+      color: 'from-blue-600 to-indigo-600',
+      activeBorder: 'border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.35)]',
+      activeBg: 'bg-blue-500/20',
+    },
+    {
+      id: 'music_blind_test',
+      title: t('mode_music_title', language),
+      subtitle: t('mode_music_desc', language),
+      icon: <Headphones className="w-5 h-5 text-fuchsia-400" />,
+      color: 'from-fuchsia-600 to-pink-600',
+      activeBorder: 'border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.35)]',
+      activeBg: 'bg-fuchsia-500/20',
+    },
+    {
+      id: 'visual_blind_test',
+      title: t('mode_visual_title', language),
+      subtitle: t('mode_visual_desc', language),
+      icon: <Eye className="w-5 h-5 text-amber-400" />,
+      color: 'from-amber-500 to-orange-600',
+      activeBorder: 'border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.35)]',
+      activeBg: 'bg-amber-500/20',
+    },
+  ];
+
+  const currentModeInfo = modesConfig.find((m) => m.id === selectedMode) || modesConfig[0];
 
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col gap-8 py-4 px-3 sm:px-6" id="multiplayer-results-view">
@@ -220,25 +306,63 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
         </div>
 
         {/* Action / New Topic or Guest Waiting */}
-        <div className="flex flex-col items-center justify-center w-full max-w-md pt-4 gap-3">
+        <div className="flex flex-col items-center justify-center w-full max-w-2xl pt-4 gap-4">
           {roomState.newQuizReady ? (
-            <div className="flex flex-col gap-3 w-full p-4 bg-purple-900/40 border border-purple-500/40 rounded-2xl backdrop-blur-xl">
-              <div className="flex items-center justify-center gap-2 text-yellow-300 font-bold text-sm text-center">
-                <Sparkles className="w-4 h-4 shrink-0" />
+            <div className="flex flex-col gap-3 w-full p-5 bg-purple-900/40 border border-purple-500/40 rounded-3xl backdrop-blur-xl shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg border ${currentModeInfo.activeBorder} ${currentModeInfo.activeBg}`}>
+                    {currentModeInfo.icon}
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider block">
+                      {t('next_game_mode', language)}
+                    </span>
+                    <span className="text-xs font-black text-white">
+                      {currentModeInfo.title}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 text-xs font-bold">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{roomState.quizData?.questions?.length || 10} questions</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-yellow-300 font-bold text-sm sm:text-base text-center py-1">
+                <Sparkles className="w-4 h-4 shrink-0 text-yellow-400" />
                 <span>{t('new_topic_loaded', language).replace('%s', roomState.themeTitle || roomState.topic)}</span>
               </div>
+
               {isHost ? (
-                <button
-                  onClick={() => {
-                    soundEngine.playStartGame();
-                    multiplayerService.startGame(roomState.code);
-                  }}
-                  id="btn-start-new-multiplayer-game"
-                  className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 shadow-[0_0_25px_rgba(168,85,247,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                  <span>{t('launch_game_players', language).replace('%s', String(playersList.length))}</span>
-                </button>
+                <div className="flex flex-col gap-2 w-full">
+                  <button
+                    onClick={() => {
+                      soundEngine.playStartGame();
+                      multiplayerService.startGame(roomState.code);
+                    }}
+                    id="btn-start-new-multiplayer-game"
+                    className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 shadow-[0_0_25px_rgba(168,85,247,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
+                  >
+                    <ArrowRight className="w-5 h-5" />
+                    <span>{t('launch_game_players', language).replace('%s', String(playersList.length))}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      onPlayClickSound?.();
+                      multiplayerService.updateRoomSettings({
+                        code: roomState.code,
+                        gameMode: selectedMode,
+                      });
+                      // Allow re-generating another topic
+                      setNewTopicInput('');
+                    }}
+                    id="btn-change-topic-again"
+                    className="text-xs text-white/60 hover:text-white underline text-center py-1 transition-colors"
+                  >
+                    {t('other_theme', language)} / Changer de mode
+                  </button>
+                </div>
               ) : (
                 <div className="text-xs text-purple-200 text-center font-semibold animate-pulse p-2">
                   {t('topic_loaded_waiting_host', language).replace('%s', roomState.players?.[roomState.hostId]?.name || t('host', language))}
@@ -246,41 +370,140 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               )}
             </div>
           ) : isHost ? (
-            <div className="flex flex-col gap-2 w-full">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newTopicInput}
-                  onChange={(e) => setNewTopicInput(e.target.value)}
-                  placeholder={t('new_topic_placeholder', language)}
-                  className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-400"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newTopicInput.trim() && !isGenerating) {
-                      handleGenerateNewQuiz();
-                    }
-                  }}
-                />
-                <button
-                  onClick={handleGenerateNewQuiz}
-                  disabled={isGenerating || !newTopicInput.trim()}
-                  id="btn-generate-new-quiz"
-                  className="px-5 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg cursor-pointer shrink-0"
-                >
-                  {isGenerating ? (
-                    <span className="animate-spin">⏳</span>
-                  ) : (
-                    <Sparkles className="w-4 h-4 text-yellow-300" />
-                  )}
-                  <span>{isGenerating ? t('loading', language) : t('generate_action', language)}</span>
-                </button>
+            <div className="flex flex-col gap-4 w-full p-4 sm:p-5 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl shadow-xl">
+              {/* Host Mode Selection */}
+              <div className="flex flex-col gap-2 text-left w-full">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    {t('change_mode_prompt', language)}
+                  </span>
+                  <span className="text-[11px] font-medium text-purple-300 bg-purple-900/40 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
+                    👑 Hôte du salon
+                  </span>
+                </div>
+
+                {/* 3 Interactive Mode Tabs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full pt-1" id="host-game-mode-selector">
+                  {modesConfig.map((mode) => {
+                    const isSelected = selectedMode === mode.id;
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => handleSelectMode(mode.id)}
+                        id={`btn-mode-select-${mode.id}`}
+                        disabled={isGenerating}
+                        className={`relative p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col gap-1.5 ${
+                          isSelected
+                            ? `${mode.activeBorder} ${mode.activeBg} ring-2 ring-purple-400/40 bg-gradient-to-b from-white/15 to-white/5`
+                            : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 opacity-75 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2">
+                            {mode.icon}
+                            <span className="text-xs sm:text-sm font-extrabold text-white">
+                              {mode.title}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <div className="w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center text-white shadow-sm">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-white/60 line-clamp-1">
+                          {mode.subtitle}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <span className="text-[11px] text-white/50 text-center">
-                {t('host_new_topic_help', language)}
-              </span>
+
+              {/* Dynamic Suggestions for selected mode */}
+              <div className="flex flex-col gap-1.5 text-left w-full">
+                <span className="text-[11px] font-bold text-white/60 uppercase tracking-wider flex items-center gap-1">
+                  {t('quick_suggestions', language)}
+                </span>
+                <div className="flex flex-wrap gap-1.5 w-full">
+                  {(MODE_SUGGESTIONS[selectedMode] || MODE_SUGGESTIONS.quiz).map((sug, sIdx) => (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      disabled={isGenerating}
+                      onClick={() => {
+                        const cleanTopic = sug.replace(/^[^\w\sÀ-ÿ]+/, '').trim();
+                        setNewTopicInput(cleanTopic);
+                        handleGenerateNewQuiz(cleanTopic);
+                      }}
+                      className="px-2.5 py-1 rounded-xl text-xs font-medium text-white/80 hover:text-white bg-white/5 hover:bg-purple-600/30 border border-white/10 hover:border-purple-400/40 transition-all cursor-pointer transform active:scale-95 disabled:opacity-50"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Topic Input & Generate Button */}
+              <div className="flex flex-col gap-2 w-full pt-1">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTopicInput}
+                    onChange={(e) => setNewTopicInput(e.target.value)}
+                    placeholder={
+                      selectedMode === 'music_blind_test'
+                        ? 'Sujet musical (ex: Rock 80s, Anime OST, Pop...)'
+                        : selectedMode === 'visual_blind_test'
+                        ? 'Sujet visuel (ex: Monuments, Logos, Animaux...)'
+                        : t('new_topic_placeholder', language)
+                    }
+                    className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTopicInput.trim() && !isGenerating) {
+                        handleGenerateNewQuiz();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => handleGenerateNewQuiz()}
+                    disabled={isGenerating || !newTopicInput.trim()}
+                    id="btn-generate-new-quiz"
+                    className="px-5 py-3 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg cursor-pointer shrink-0"
+                  >
+                    {isGenerating ? (
+                      <span className="animate-spin">⏳</span>
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-yellow-300" />
+                    )}
+                    <span>{isGenerating ? t('loading', language) : t('generate_action', language)}</span>
+                  </button>
+                </div>
+                <span className="text-[11px] text-white/50 text-center">
+                  {t('host_change_mode_hint', language)}
+                </span>
+              </div>
             </div>
           ) : (
-            <div className="text-sm text-white/80 font-semibold p-4 bg-white/5 rounded-2xl border border-white/10 text-center w-full backdrop-blur-md">
-              {t('waiting_host_new_quiz', language)}
+            <div className="flex flex-col gap-3 w-full p-5 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl text-center shadow-lg">
+              <div className="flex items-center justify-center gap-2">
+                <div className={`p-1.5 rounded-lg border ${currentModeInfo.activeBorder} ${currentModeInfo.activeBg}`}>
+                  {currentModeInfo.icon}
+                </div>
+                <div className="text-left">
+                  <span className="text-[10px] uppercase font-bold text-white/50 tracking-wider block">
+                    {t('mode_selected_by_host', language)}
+                  </span>
+                  <span className="text-xs sm:text-sm font-extrabold text-white">
+                    {currentModeInfo.title}
+                  </span>
+                </div>
+              </div>
+              <div className="text-xs sm:text-sm text-white/80 font-semibold animate-pulse pt-1">
+                {t('waiting_host_new_quiz', language)}
+              </div>
             </div>
           )}
 

@@ -7,6 +7,8 @@ import {
   Gamepad2,
   AlertCircle,
   Check,
+  Globe2,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { soundEngine } from '../services/soundEngine';
@@ -18,7 +20,9 @@ interface JoinRoomModalProps {
   isOpen: boolean;
   onClose: () => void;
   onJoinRoom: (code: string, playerName: string, avatar: string) => void;
+  onOpenPublicRooms?: () => void;
   initialCode?: string;
+  isCodeLocked?: boolean;
   isConnecting?: boolean;
   errorMessage?: string | null;
 }
@@ -30,7 +34,9 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   isOpen,
   onClose,
   onJoinRoom,
+  onOpenPublicRooms,
   initialCode = '',
+  isCodeLocked = false,
   isConnecting = false,
   errorMessage = null,
 }) => {
@@ -49,7 +55,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = (isCodeLocked && initialCode ? initialCode : code).trim().toUpperCase();
     const cleanName = playerName.trim();
 
     if (!cleanCode) {
@@ -97,7 +103,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
               <div>
                 <h3 className="text-xl font-extrabold text-white font-heading">{t('join_room', language)}</h3>
                 <p className="text-xs text-white/60">
-                  {t('join_modal_desc', language)}
+                  {isCodeLocked ? t('public_room_locked_badge', language) : t('join_modal_desc', language)}
                 </p>
               </div>
             </div>
@@ -123,18 +129,42 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Room Code */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-white/80 uppercase tracking-wider">
-                {t('room_code_label', language)}
-              </label>
-              <input
-                type="text"
-                maxLength={8}
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="Ex: 8XF72Q"
-                className="w-full bg-white/5 border border-white/15 focus:border-purple-400 focus:bg-white/10 rounded-2xl px-4 py-3 text-lg font-black tracking-widest text-center text-white placeholder-white/20 uppercase transition-all outline-none"
-                autoFocus={!initialCode}
-              />
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-white/80 uppercase tracking-wider">
+                  {t('room_code_label', language)}
+                </label>
+                {isCodeLocked && (
+                  <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-pink-300 bg-pink-500/20 border border-pink-500/30 px-2 py-0.5 rounded-md">
+                    <Lock className="w-3 h-3" />
+                    <span>{t('room_public_label', language)}</span>
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  maxLength={8}
+                  value={code}
+                  onChange={(e) => {
+                    if (!isCodeLocked) {
+                      setCode(e.target.value.toUpperCase());
+                    }
+                  }}
+                  readOnly={isCodeLocked}
+                  placeholder="Ex: 8XF72Q"
+                  className={`w-full rounded-2xl px-4 py-3 text-lg font-black tracking-widest text-center text-white placeholder-white/20 uppercase transition-all outline-none ${
+                    isCodeLocked
+                      ? 'bg-purple-950/40 border border-purple-500/50 text-purple-200 cursor-not-allowed select-none'
+                      : 'bg-white/5 border border-white/15 focus:border-purple-400 focus:bg-white/10'
+                  }`}
+                  autoFocus={!initialCode || !isCodeLocked}
+                />
+                {isCodeLocked && (
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-pink-400 pointer-events-none">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Player Name */}
@@ -149,7 +179,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                 onChange={(e) => setPlayerName(e.target.value)}
                 placeholder="Ex: Alex, MasterQuiz..."
                 className="w-full bg-white/5 border border-white/15 focus:border-purple-400 focus:bg-white/10 rounded-2xl px-4 py-3 text-sm font-bold text-white placeholder-white/20 transition-all outline-none"
-                autoFocus={Boolean(initialCode)}
+                autoFocus={Boolean(initialCode) || isCodeLocked}
               />
             </div>
 
@@ -192,6 +222,24 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                 </>
               )}
             </button>
+
+            {/* Switch to Public Rooms */}
+            {onOpenPublicRooms && !isCodeLocked && (
+              <div className="pt-2 border-t border-white/10 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    onClose();
+                    onOpenPublicRooms();
+                  }}
+                  className="text-xs font-bold text-purple-300 hover:text-purple-200 flex items-center gap-1.5 cursor-pointer py-1 transition-colors"
+                >
+                  <Globe2 className="w-3.5 h-3.5 text-pink-400" />
+                  <span>{t('browse_public_rooms', language)}</span>
+                </button>
+              </div>
+            )}
           </form>
         </motion.div>
       </div>
