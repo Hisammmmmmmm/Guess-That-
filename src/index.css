@@ -93,7 +93,7 @@
 }
 
 @keyframes marquee-smooth {
-  0% {
+  0%, 10% {
     transform: translateX(0);
   }
   100% {
@@ -104,7 +104,7 @@
 .animate-marquee-smooth {
   display: inline-block;
   white-space: nowrap;
-  animation: marquee-smooth 16s linear infinite;
+  animation: marquee-smooth 25s linear infinite;
   will-change: transform;
 }
 

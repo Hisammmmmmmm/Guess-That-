@@ -552,7 +552,9 @@ export default function App() {
         }
         if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
           try {
-            const qVol = updated.questionMusicVolume ?? 0.8;
+            const baseQVol = updated.questionMusicVolume ?? 0.8;
+            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : 1.0;
+            const qVol = Math.min(1.0, baseQVol * modeMultiplier);
             mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
           } catch {}
         }
@@ -570,10 +572,12 @@ export default function App() {
         }
       }
       if (newSettings.questionMusicVolume !== undefined) {
-        const qVol = newSettings.questionMusicVolume;
-        soundEngine.setQuestionMusicVolume(qVol);
+        const baseQVol = newSettings.questionMusicVolume;
+        soundEngine.setQuestionMusicVolume(baseQVol);
         if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
           try {
+            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : 1.0;
+            const qVol = Math.min(1.0, baseQVol * modeMultiplier);
             mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
           } catch {}
         }
@@ -583,6 +587,9 @@ export default function App() {
       }
       if (newSettings.musicEnabled !== undefined) {
         soundEngine.setMusicMuted(!newSettings.musicEnabled);
+        if (newSettings.musicEnabled && (screen === 'menu' || screen === 'results' || screen === 'multiplayer_results' || screen === 'lobby' || screen === 'room_lobby')) {
+          soundEngine.startMenuMusic();
+        }
       }
       return updated;
     });
@@ -656,26 +663,26 @@ export default function App() {
     setIsGenerating(true);
     setErrorMessage(null);
 
-    // If competitive room mode: Immediately create and display the room lobby!
-    // All questions are generated dynamically by AI as requested, while friends can already scan and join
-    if (finalStyle === 'competitive_room' && screen !== 'room_lobby' && !multiplayerService.getCurrentRoomCode()) {
-      multiplayerService.createRoom({
-        hostName: profileName?.trim() || 'Michel',
-        avatar: profileAvatar || '👑',
-        isPublic: isPublic ?? true,
-        quizData: {
-          topic,
-          themeTitle: fallbackTheme?.title || topic,
+    if (finalStyle === 'competitive_room') {
+      if (screen !== 'room_lobby' && !multiplayerService.getCurrentRoomCode()) {
+        multiplayerService.createRoom({
+          hostName: profileName?.trim() || 'Michel',
+          avatar: profileAvatar || '👑',
+          isPublic: isPublic ?? true,
+          quizData: {
+            topic,
+            themeTitle: fallbackTheme?.title || topic,
+            difficulty: finalDifficulty,
+            gameMode: finalMode,
+            gameStyle: 'competitive_room',
+            questions: [],
+          },
           difficulty: finalDifficulty,
           gameMode: finalMode,
-          gameStyle: 'competitive_room',
-          questions: [],
-        },
-        difficulty: finalDifficulty,
-        gameMode: finalMode,
-        language: settings.language,
-        durationPerQuestion: settings.durationPerQuestion,
-      });
+          language: settings.language,
+          durationPerQuestion: settings.durationPerQuestion,
+        });
+      }
       setScreen('room_lobby');
     } else {
       setScreen('generating');
@@ -1020,7 +1027,7 @@ export default function App() {
       return;
     }
 
-    if (screen === 'menu') {
+    if (screen === 'menu' || screen === 'results' || screen === 'multiplayer_results' || screen === 'lobby' || screen === 'room_lobby') {
       soundEngine.startMenuMusic().then((isCustom) => {
         if (isCustom) {
           setYtVideoId(null);
@@ -1775,8 +1782,11 @@ export default function App() {
                                   } catch (err) {
                                     // ignore
                                   }
-                                  const qVol = Math.min(100, Math.max(0, Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)));
-                                  e.target.setVolume(qVol);
+                                  const baseQVol = settings.questionMusicVolume ?? 0.8;
+                                  const modeMultiplier = settings.gameMode === 'music_blind_test' ? 1.2 : 1.0;
+                                  const qVol = Math.min(1.0, baseQVol * modeMultiplier);
+                                  const finalVol = Math.min(100, Math.max(0, Math.round(qVol * (settings.masterVolume ?? 1.0) * 100)));
+                                  e.target.setVolume(finalVol);
                                   e.target.playVideo();
                                 }}
                                 onEnd={(e) => {

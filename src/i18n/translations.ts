@@ -233,6 +233,7 @@ export const translations: Record<string, Record<string, string>> = {
     "change_host_name": "Changer mon nom d’hôte",
     "change_player_name": "Changer mon pseudo",
     "you_are_the_host": "Tu es l’hôte 👑",
+    "you": "Toi",
     "you_edit": "Toi (Modifier ✎)",
     "reactions_label": "Réactions :",
     "start_game_players": "Lancer la Partie",

@@ -364,18 +364,6 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  id="btn-edit-lobby-profile"
-                  onClick={() => {
-                    soundEngine.playClick();
-                    setIsEditingProfile(true);
-                  }}
-                  className="px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-purple-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
-                >
-                  <Edit2 className="w-3 h-3" />
-                  <span>{isHost ? t('change_host_name', language) : t('change_player_name', language)}</span>
-                </button>
                 <span className="text-[10px] text-white/50 hidden sm:inline">
                   {isHost ? t('you_are_the_host', language) : t('waiting_for_host', language)}
                 </span>
@@ -389,18 +377,11 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 return (
                   <div
                     key={player.id}
-                    onClick={() => {
-                      if (isMe) {
-                        soundEngine.playClick();
-                        setIsEditingProfile(true);
-                      }
-                    }}
                     className={`p-2 rounded-xl border flex items-center justify-between transition-all backdrop-blur-md ${
                       isMe
-                        ? 'bg-purple-500/20 border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] ring-1 ring-purple-400/40 cursor-pointer hover:bg-purple-500/30'
+                        ? 'bg-purple-500/20 border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] ring-1 ring-purple-400/40'
                         : 'bg-white/5 border-white/10'
                     }`}
-                    title={isMe ? (isHost ? t('change_host_name', language) : t('change_player_name', language)) : undefined}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-lg w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center border border-white/15 shrink-0">
@@ -416,7 +397,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                           )}
                         </div>
                         <span className="text-[9px] text-white/50 flex items-center gap-1">
-                          {isMe ? t('you_edit', language) : t('ready', language)}
+                          {isMe ? t('you', language) : t('ready', language)}
                         </span>
                       </div>
                     </div>
