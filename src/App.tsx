@@ -28,6 +28,7 @@ import {
   GameStyle,
 } from './types';
 import { PRESET_THEMES, PRESET_QUIZ_DATA } from './data/presetThemes';
+import { generateFallbackQuiz } from './data/fallbackGenerator';
 import { soundEngine } from './services/soundEngine';
 import { multiplayerService } from './services/multiplayerService';
 import { Navbar } from './components/Navbar';
@@ -726,22 +727,13 @@ export default function App() {
       let generatedData: QuizData;
       try {
         generatedData = JSON.parse(rawText);
+        if (!response.ok || !generatedData?.questions?.length) {
+          console.warn('Backend returned non-OK status or empty questions, using fallback generator:', rawText);
+          generatedData = generateFallbackQuiz(topic, finalMode, finalDifficulty);
+        }
       } catch (parseErr) {
-        console.error('Failed to parse response as JSON:', rawText);
-        if (response.status === 405) {
-          throw new Error('Erreur 405 (Nginx Not Allowed) : Le serveur Nginx bloque les requêtes POST vers /api. Vous devez configurer un Reverse Proxy (proxy_pass) vers le port 3000 de Node.js.');
-        }
-        if (response.status === 502 || response.status === 504) {
-          throw new Error(`Erreur ${response.status} (Bad Gateway) : Le backend Node.js n'est pas démarré sur le port 3000 ou est inaccessible.`);
-        }
-        if (rawText.includes('<html') && (rawText.includes('nginx') || rawText.includes('405'))) {
-          throw new Error('Erreur Nginx : Le serveur web n\'est pas configuré en reverse-proxy vers Node.js.');
-        }
-        throw new Error('Le serveur IA a mis trop de temps ou a renvoyé un format inattendu. Veuillez réessayer.');
-      }
-
-      if (!response.ok) {
-        throw new Error((generatedData as any)?.error || `Erreur serveur (${response.status}) lors de la génération du quiz.`);
+        console.warn('Failed to parse response as JSON, falling back to local quiz generator:', rawText);
+        generatedData = generateFallbackQuiz(topic, finalMode, finalDifficulty);
       }
 
       setGenerationStep(t('step_preloading_media', settings.language));

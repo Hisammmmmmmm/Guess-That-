@@ -4,10 +4,9 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
-import { generateDynamicFallbackQuiz } from './src/data/fallbackGenerator';
-import { BOT_ROOMS_DATA, BotRoomConfig } from './server/botRoomsData';
+import { generateFallbackQuiz } from './src/data/fallbackGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +23,6 @@ interface ServerPlayer {
   selectedOption?: string;
   timeSpent?: number;
   isHost: boolean;
-  isBot?: boolean;
   lastScoreEarned?: number;
   answersHistory?: Record<number, { selectedOption: string; isCorrect: boolean; timeSpent: number; scoreEarned: number }>;
   ws?: WebSocket;
@@ -42,16 +40,11 @@ interface ServerRoom {
   difficulty: string;
   gameMode: string;
   gameStyle: string;
-  language: string;
   durationPerQuestion: number;
   currentQuestionIndex: number;
   questionStartTime: number;
   quizData: any;
   newQuizReady?: boolean;
-  isPublic?: boolean;
-  isBotRoom?: boolean;
-  botConfig?: BotRoomConfig;
-  botTimers?: NodeJS.Timeout[];
   players: Map<string, ServerPlayer>;
   createdAt: number;
   autoNextTimer?: any;
@@ -59,71 +52,6 @@ interface ServerRoom {
 
 // In-memory active rooms map
 const activeRooms = new Map<string, ServerRoom>();
-
-// Global statistics tracker
-let totalGenerations = 1842;
-const connectedSockets = new Set<WebSocket>();
-
-function getGlobalStats() {
-  let totalBots = 0;
-  activeRooms.forEach((room) => {
-    room.players.forEach((p) => {
-      if (p.isBot) {
-        totalBots += 1;
-      }
-    });
-  });
-
-  return {
-    onlinePlayers: Math.max(1, connectedSockets.size + totalBots),
-    activeRooms: activeRooms.size,
-    totalGenerations,
-  };
-}
-
-function broadcastGlobalStats() {
-  const stats = getGlobalStats();
-  const msg = JSON.stringify({ type: 'global_stats', stats });
-  connectedSockets.forEach((sock) => {
-    if (sock.readyState === WebSocket.OPEN) {
-      sock.send(msg);
-    }
-  });
-}
-
-function getPublicRoomsSummary(filterLang?: string, filterMode?: string) {
-  const list: any[] = [];
-  activeRooms.forEach((room) => {
-    if (room.isPublic === false) return;
-    if (filterLang && filterLang !== 'all' && room.language !== filterLang) return;
-    if (filterMode && filterMode !== 'all' && room.gameMode !== filterMode) return;
-
-    const hostPlayer = room.players.get(room.hostId);
-    list.push({
-      code: room.code,
-      hostName: hostPlayer?.name || 'Hôte',
-      hostAvatar: hostPlayer?.avatar || '👑',
-      themeTitle: room.themeTitle,
-      topic: room.topic,
-      gameMode: room.gameMode,
-      difficulty: room.difficulty,
-      language: room.language,
-      playerCount: room.players.size,
-      maxPlayers: 8,
-      status: room.status,
-      isPublic: true,
-      isBotRoom: Boolean(room.isBotRoom),
-      currentQuestionIndex: room.currentQuestionIndex,
-      totalQuestions: room.quizData?.questions?.length || 0,
-    });
-  });
-
-  // Sort: real human rooms first, then by player count descending
-  return list.sort((a, b) => {
-    if (a.isBotRoom !== b.isBotRoom) return a.isBotRoom ? 1 : -1;
-    return b.playerCount - a.playerCount;
-  });
-}
 
 function serializeRoom(room: ServerRoom) {
   const playersObj: Record<string, any> = {};
@@ -140,7 +68,6 @@ function serializeRoom(room: ServerRoom) {
       selectedOption: room.status === 'question_result' || room.status === 'game_over' ? p.selectedOption : undefined,
       timeSpent: p.timeSpent,
       isHost: p.isHost,
-      isBot: p.isBot,
       lastScoreEarned: p.lastScoreEarned,
       answersHistory: p.answersHistory || {},
     };
@@ -158,14 +85,11 @@ function serializeRoom(room: ServerRoom) {
     difficulty: room.difficulty,
     gameMode: room.gameMode,
     gameStyle: room.gameStyle,
-    language: room.language,
     durationPerQuestion: room.durationPerQuestion,
     currentQuestionIndex: room.currentQuestionIndex,
     questionStartTime: room.questionStartTime,
     quizData: room.quizData,
     newQuizReady: room.newQuizReady,
-    isPublic: room.isPublic ?? true,
-    isBotRoom: Boolean(room.isBotRoom),
     players: playersObj,
   };
 }
@@ -200,280 +124,6 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
-
-  // Global platform statistics endpoint
-  app.get('/api/stats', (req, res) => {
-    res.json(getGlobalStats());
-  });
-
-  // Public rooms discovery endpoint with language and gameMode filters
-  app.get('/api/public-rooms', (req, res) => {
-    const lang = typeof req.query.language === 'string' ? req.query.language : undefined;
-    const mode = typeof req.query.gameMode === 'string' ? req.query.gameMode : undefined;
-    res.json({ rooms: getPublicRoomsSummary(lang, mode) });
-  });
-
-  // Bot Rooms Autonomous Cycle Functions
-  function runBotRoomCycle(room: ServerRoom) {
-    if (room.autoNextTimer) {
-      clearTimeout(room.autoNextTimer);
-      room.autoNextTimer = null;
-    }
-    if (room.botTimers) {
-      room.botTimers.forEach(t => clearTimeout(t));
-      room.botTimers = [];
-    }
-
-    room.status = 'lobby';
-    room.currentQuestionIndex = 0;
-    room.players.forEach(p => {
-      p.score = 0;
-      p.streak = 0;
-      p.maxStreak = 0;
-      p.answeredCurrent = false;
-      p.isCorrect = undefined;
-      p.selectedOption = undefined;
-      p.lastScoreEarned = 0;
-      p.answersHistory = {};
-    });
-
-    broadcastToRoom(room, { type: 'room_state', room: serializeRoom(room) });
-    broadcastToRoom(room, { type: 'room_updated', room: serializeRoom(room) });
-
-    // Wait 8s in lobby then start question 0
-    room.autoNextTimer = setTimeout(() => {
-      startBotRoomQuestion(room, 0);
-    }, 8000);
-  }
-
-  function startBotRoomQuestion(room: ServerRoom, qIndex: number) {
-    if (room.autoNextTimer) {
-      clearTimeout(room.autoNextTimer);
-      room.autoNextTimer = null;
-    }
-    if (room.botTimers) {
-      room.botTimers.forEach(t => clearTimeout(t));
-      room.botTimers = [];
-    }
-
-    const questions = room.quizData?.questions || [];
-    if (qIndex >= questions.length || !questions[qIndex]) {
-      finishBotRoomGame(room);
-      return;
-    }
-
-    const currentQ = questions[qIndex];
-    room.status = 'playing';
-    room.currentQuestionIndex = qIndex;
-    room.questionStartTime = Date.now();
-
-    room.players.forEach(p => {
-      p.answeredCurrent = false;
-      p.isCorrect = undefined;
-      p.selectedOption = undefined;
-      p.lastScoreEarned = 0;
-    });
-
-    const serialized = serializeRoom(room);
-    broadcastToRoom(room, { type: 'next_question_started', room: serialized });
-    broadcastToRoom(room, { type: 'room_state', room: serialized });
-    broadcastToRoom(room, { type: 'room_updated', room: serialized });
-
-    // Schedule bots answering with realistic human-like delays
-    if (room.botConfig?.bots) {
-      room.botConfig.bots.forEach((botConf) => {
-        const botPlayer = room.players.get(botConf.id);
-        if (!botPlayer) return;
-
-        const delaySec = botConf.speedMin + Math.random() * (botConf.speedMax - botConf.speedMin);
-        const delayMs = Math.round(delaySec * 1000);
-
-        const timer = setTimeout(() => {
-          if (room.status !== 'playing' || room.currentQuestionIndex !== qIndex) return;
-          if (botPlayer.answeredCurrent) return;
-
-          const isCorrect = Math.random() < botConf.accuracy;
-          let selectedOption = currentQ.correctAnswer;
-          if (!isCorrect) {
-            const wrongOptions = currentQ.options.filter((o: string) => o !== currentQ.correctAnswer);
-            selectedOption = wrongOptions[Math.floor(Math.random() * wrongOptions.length)] || currentQ.options[0];
-          }
-
-          let earned = 0;
-          if (isCorrect) {
-            botPlayer.streak += 1;
-            if (botPlayer.streak > botPlayer.maxStreak) botPlayer.maxStreak = botPlayer.streak;
-            let multiplier = 1.0;
-            if (botPlayer.streak >= 5) multiplier = 3.0;
-            else if (botPlayer.streak >= 3) multiplier = 2.0;
-            else if (botPlayer.streak >= 2) multiplier = 1.5;
-
-            const speedRatio = Math.max(0, 1 - (delaySec / (room.durationPerQuestion || 15)));
-            const basePoints = 500 + Math.round(500 * speedRatio);
-            earned = Math.round(basePoints * multiplier);
-            botPlayer.score += earned;
-          } else {
-            botPlayer.streak = 0;
-          }
-
-          botPlayer.answeredCurrent = true;
-          botPlayer.isCorrect = isCorrect;
-          botPlayer.selectedOption = selectedOption;
-          botPlayer.timeSpent = Math.round(delaySec * 10) / 10;
-          botPlayer.lastScoreEarned = earned;
-          if (!botPlayer.answersHistory) botPlayer.answersHistory = {};
-          botPlayer.answersHistory[qIndex] = {
-            selectedOption,
-            isCorrect,
-            timeSpent: botPlayer.timeSpent,
-            scoreEarned: earned,
-          };
-
-          broadcastToRoom(room, {
-            type: 'player_answered',
-            playerId: botPlayer.id,
-            room: serializeRoom(room),
-          });
-          broadcastToRoom(room, {
-            type: 'room_updated',
-            room: serializeRoom(room),
-          });
-
-          // Check if all players (humans + bots) have answered
-          let allDone = true;
-          room.players.forEach(p => {
-            if (!p.answeredCurrent) allDone = false;
-          });
-          if (allDone) {
-            revealBotRoomQuestion(room, qIndex);
-          }
-        }, delayMs);
-
-        room.botTimers?.push(timer);
-      });
-    }
-
-    // Question duration timeout (15s duration + buffer)
-    room.autoNextTimer = setTimeout(() => {
-      if (room.status === 'playing' && room.currentQuestionIndex === qIndex) {
-        revealBotRoomQuestion(room, qIndex);
-      }
-    }, ((room.durationPerQuestion || 15) * 1000) + 400);
-  }
-
-  function revealBotRoomQuestion(room: ServerRoom, qIndex: number) {
-    if (room.status === 'question_result' || room.status === 'game_over') return;
-    if (room.autoNextTimer) {
-      clearTimeout(room.autoNextTimer);
-      room.autoNextTimer = null;
-    }
-    if (room.botTimers) {
-      room.botTimers.forEach(t => clearTimeout(t));
-      room.botTimers = [];
-    }
-
-    room.status = 'question_result';
-    const serialized = serializeRoom(room);
-    broadcastToRoom(room, { type: 'question_revealed', room: serialized });
-    broadcastToRoom(room, { type: 'room_state', room: serialized });
-    broadcastToRoom(room, { type: 'room_updated', room: serialized });
-
-    // 5s reveal delay before next question
-    room.autoNextTimer = setTimeout(() => {
-      const questions = room.quizData?.questions || [];
-      if (qIndex + 1 < questions.length) {
-        startBotRoomQuestion(room, qIndex + 1);
-      } else {
-        finishBotRoomGame(room);
-      }
-    }, 5000);
-  }
-
-  function finishBotRoomGame(room: ServerRoom) {
-    if (room.autoNextTimer) {
-      clearTimeout(room.autoNextTimer);
-      room.autoNextTimer = null;
-    }
-    if (room.botTimers) {
-      room.botTimers.forEach(t => clearTimeout(t));
-      room.botTimers = [];
-    }
-
-    room.status = 'game_over';
-    const serialized = serializeRoom(room);
-    broadcastToRoom(room, { type: 'game_over', room: serialized });
-    broadcastToRoom(room, { type: 'room_state', room: serialized });
-    broadcastToRoom(room, { type: 'room_updated', room: serialized });
-
-    // 8s leaderboard display then restart the infinite loop in lobby
-    room.autoNextTimer = setTimeout(() => {
-      runBotRoomCycle(room);
-    }, 8000);
-  }
-
-  function initBotRooms() {
-    BOT_ROOMS_DATA.forEach((config) => {
-      const hostBot = config.bots[0];
-      const players = new Map<string, ServerPlayer>();
-
-      config.bots.forEach((bot, index) => {
-        players.set(bot.id, {
-          id: bot.id,
-          name: bot.name,
-          avatar: bot.avatar,
-          score: 0,
-          streak: 0,
-          maxStreak: 0,
-          answeredCurrent: false,
-          isHost: index === 0,
-          isBot: true,
-          lastScoreEarned: 0,
-          answersHistory: {},
-        });
-      });
-
-      const quizData = {
-        themeTitle: config.themeTitle,
-        topic: config.topic,
-        themeBgImage: config.themeBgImage,
-        primaryColor: config.primaryColor,
-        accentColor: config.accentColor,
-        ambientSound: config.ambientSound,
-        questions: config.questions,
-      };
-
-      const room: ServerRoom = {
-        code: config.code,
-        hostId: hostBot.id,
-        status: 'lobby',
-        topic: config.topic,
-        themeTitle: config.themeTitle,
-        themeBgImage: config.themeBgImage,
-        primaryColor: config.primaryColor,
-        accentColor: config.accentColor,
-        difficulty: config.difficulty,
-        gameMode: config.gameMode,
-        gameStyle: 'competitive_room',
-        language: config.language,
-        durationPerQuestion: 15,
-        currentQuestionIndex: 0,
-        questionStartTime: 0,
-        quizData,
-        isPublic: true,
-        isBotRoom: true,
-        botConfig: config,
-        botTimers: [],
-        players,
-        createdAt: Date.now(),
-      };
-
-      activeRooms.set(config.code, room);
-      runBotRoomCycle(room);
-    });
-  }
-
-  // Initialize bot rooms at server boot
-  initBotRooms();
 
   // In-memory cache for YouTube searches to make audio instant
   const ytCache = new Map<string, { videoId: string; title: string; videoIds?: string[] }>();
@@ -714,30 +364,12 @@ async function startServer() {
   app.get('/api/tts', async (req, res) => {
     try {
       const text = req.query.text as string;
-      const langParam = ((req.query.lang as string) || 'fr').toLowerCase();
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
-
-      // Map app language code to google-tts-api supported language code
-      const ttsLangMap: Record<string, string> = {
-        'fr': 'fr',
-        'en': 'en',
-        'es': 'es',
-        'de': 'de',
-        'it': 'it',
-        'pt': 'pt',
-        'nl': 'nl',
-        'ru': 'ru',
-        'ja': 'ja',
-        'zh': 'zh-CN',
-        'ar': 'ar',
-      };
-      const lang = ttsLangMap[langParam] || langParam || 'fr';
-
       const googleTTS = await import('google-tts-api');
       const base64Audio = await googleTTS.getAudioBase64(text.slice(0, 200), {
-        lang: lang,
+        lang: 'fr',
         slow: false,
         host: 'https://translate.google.com',
       });
@@ -750,403 +382,295 @@ async function startServer() {
 
   // AI Quiz Generation Endpoint
   app.post('/api/generate-quiz', async (req, res) => {
-    try {
-      const { topic, difficulty = 'medium', language = 'fr', gameMode = 'quiz' } = req.body;
+    const { topic, difficulty = 'medium', language = 'fr', gameMode = 'quiz' } = req.body;
 
-      const codeToName: Record<string, string> = {
-        'fr': 'Français (French)',
-        'en': 'English',
-        'es': 'Español (Spanish)',
-        'de': 'Deutsch (German)',
-        'it': 'Italiano (Italian)',
-        'pt': 'Português (Portuguese)',
-        'nl': 'Nederlands (Dutch)',
-        'ru': 'Русский (Russian)',
-        'ja': '日本語 (Japanese)',
-        'zh': '中文 (Chinese)',
-        'ar': 'العربية (Arabic)'
-      };
-      const langName = codeToName[language] || language;
+    if (!topic || typeof topic !== 'string' || topic.trim().length === 0) {
+      return res.status(400).json({ error: 'Le sujet (topic) est requis.' });
+    }
 
-      if (!topic || typeof topic !== 'string' || topic.trim().length === 0) {
-        return res.status(400).json({ error: 'Le sujet (topic) est requis.' });
-      }
+    const apiKey = process.env.GEMINI_API_KEY;
 
-      let parsedData: any = null;
-      let quotaExceededNotice = false;
-
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        console.warn('GEMINI_API_KEY not configured in environment. Using dynamic fallback engine for topic:', topic);
-        parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
-        quotaExceededNotice = true;
-      } else {
-        const ai = new GoogleGenAI({
-          apiKey,
-        });
-
-// 2. Instructions spécifiques au mode de jeu (CORRIGÉES)
-      let modeInstructions = '';
-      if (gameMode === 'visual_blind_test') {
-        modeInstructions = `MODE : BLIND TEST VISUEL (Reconnaissance d'image)
+    let modeInstructions = '';
+    if (gameMode === 'visual_blind_test') {
+      modeInstructions = `MODE : BLIND TEST VISUEL (Reconnaissance d'image)
 - L'objectif est STRICTEMENT de reconnaître l'élément visuel affiché (personnage, objet, lieu, ou l'œuvre d'origine).
-- "question" : DOIT ÊTRE TRÈS COURTE, SIMPLE ET DIRECTE SANS AUCUN SPOILER. Varie les formulations selon le contexte de l'image. Exemples : "Qui est ce personnage ?", "Quel est cet objet ?", "À qui appartient cet objet ?", "De quelle série vient cette image ?", "Quel est ce lieu ?". Ne te limite pas à "Qui est ce personnage ?".
+- "question" : DOIT ÊTRE TRÈS COURTE, SIMPLE ET DIRECTE SANS AUCUN SPOILER. Exemples : "Qui est ce personnage ?", "Quel est cet objet ?", "De quelle série vient cette image ?", "Quel est ce lieu ?".
 - "options" : 4 propositions précises (dont 1 bonne réponse).
 - "clue" : Laisse ce champ vide "" (l'image est l'unique support de devinette).
-- "wikiSearchQuery" : LE NOM COMPLET OFFICIEL de l'entité/objet/série pour obtenir son image via moteur de recherche (ex: "Dragon Balls", "Épée de légende Zelda", "Batarang", "Central Perk", "Millennium Falcon"). Sois très précis pour garantir une bonne image.`;
-      } else if (gameMode === 'music_blind_test') {
-        modeInstructions = `MODE : BLIND TEST MUSICAL (Reconnaissance audio & thèmes)
+- "wikiSearchQuery" : LE NOM COMPLET OFFICIEL de l'entité/objet/série pour obtenir son image (ex: "Dragon Balls", "Épée de légende Zelda", "Batarang", "Central Perk", "Millennium Falcon").`;
+    } else if (gameMode === 'music_blind_test') {
+      modeInstructions = `MODE : BLIND TEST MUSICAL (Reconnaissance audio & thèmes)
 - L'objectif est d'identifier les musiques cultes, génériques, OST ou thèmes sonores.
-- "question" : DOIT porter UNIQUEMENT sur l'écoute. Pose SIMPLEMENT l'une de ces questions : "À quelle série/film vient cette musique ?", "De quel personnage cette musique est-elle le thème ?" ou "C'est le son de quoi ?". NE DONNE AUCUN SPOILER DANS LA QUESTION.
+- "question" : DOIT porter UNIQUEMENT sur l'écoute. Exemples : "De quelle œuvre vient cette musique ?", "De qui cette musique est-elle le thème ?", "Quel est ce morceau ?". NE DONNE AUCUN SPOILER.
 - "options" : 4 propositions de morceaux, œuvres ou personnages.
-- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March"). Il servira à jouer la vraie musique.`;
-      } else {
-        modeInstructions = `MODE : QUIZ CLASSIQUE
+- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March").`;
+    } else {
+      modeInstructions = `MODE : QUIZ CLASSIQUE
 - Questions variées de culture générale, énigmes, citations et devinettes sur le thème.
-- "youtubeSearchQuery" : POUR CHAQUE QUESTION, fournis LE TITRE EXACT d'une musique, OST, ou ambiance sonore liée spécifiquement à la réponse ou au sujet de cette question (ex: "Musique Tristesse et Douleur Naruto", "Star Wars Imperial March", "Ambiance sonore forêt magique"). Cette musique sera jouée en fond sonore pendant la question.`;
-      }
+- "youtubeSearchQuery" : Fournis le titre exact d'une musique, OST ou ambiance sonore liée au sujet.`;
+    }
 
-      let difficultyInstructions = '';
-      if (difficulty === 'expert') {
-        difficultyInstructions = `EXPERT : Niveau d'érudit absolu. Sélectionne les éléments les plus pointus, obscurs ou spécifiques possibles. Les questions doivent être ultra-précises. Les 4 propositions de réponses doivent être extrêmement similaires, vicieuses et conçues pour induire en erreur le joueur. Laisse aucune place au hasard.`;
-      } else if (difficulty === 'hard') {
-        difficultyInstructions = `TRÈS DIFFICILE : Choisis les éléments les plus obscurs, des personnages très secondaires, des objets rares, des lieux très spécifiques ou des thèmes musicaux oubliés. Aucune question facile ou moyenne.`;
-      } else if (difficulty === 'medium') {
-        difficultyInstructions = `MOYEN : Équilibre entre des éléments connus et quelques pièges.`;
-      } else {
-        difficultyInstructions = `FACILE : Pour les débutants, les éléments les plus emblématiques et connus.`;
-      }
+    let difficultyInstructions = '';
+    if (difficulty === 'expert') {
+      difficultyInstructions = `EXPERT : Questions pointues, pièges subtils, 4 choix très proches.`;
+    } else if (difficulty === 'hard') {
+      difficultyInstructions = `DIFFICILE : Éléments pointus, personnages secondaires ou détails spécifiques.`;
+    } else if (difficulty === 'medium') {
+      difficultyInstructions = `MOYEN : Équilibre entre éléments cultes et questions de réflexion.`;
+    } else {
+      difficultyInstructions = `FACILE : Éléments emblématiques et accessibles à tous.`;
+    }
 
-      const prompt = `Tu es le créateur expert du jeu "Blind Test Ultimate".
-Génère un quiz de 15 énigmes captivantes et stimulantes sur le thème suivant : "${topic}".
+    const prompt = `Tu es le créateur expert du jeu "Blind Test Ultimate".
+Génère un quiz ultra-dynamique de 15 questions captivantes sur le thème : "${topic}".
 
 ${modeInstructions}
 
 RÈGLES IMPORTANTES :
-1. Génère EXACTEMENT 15 questions progressives (de la plus accessible à la plus pointue pour ce niveau).
+1. Génère EXACTEMENT 15 questions progressives.
 2. Pour CHAQUE question :
-   - "question" : L'énoncé doit très court et adapté au mode.
-   - "options" : 4 propositions crédibles et distinctes. ATTENTION : Mélange impérativement l'ordre des options de façon aléatoire (la bonne réponse NE DOIT PAS être systématiquement en première position !).
-   - "correctAnswer" : La réponse exacte (doit correspondre mot pour mot à l'une des 4 options).
-   - "wikiSearchQuery" : Le terme précis pour trouver l'IMAGE (ex: "Monkey D. Luffy", "Sabre laser Star Wars", "Pikachu"). ATTENTION : Cherche l'objet ou le personnage spécifique dont on parle, évite le logo de la série !
-   - "youtubeSearchQuery" : (Seulement pour Blind Test Musical) Le terme exact pour trouver la musique sur YouTube.
-   - "clue" : Un court indice (ou vide si blind test visuel).
-   - "audioNotes" : Un tableau de 4 à 7 fréquences sonores en Hertz (ex: [261.63, 329.63, 392.0, 523.25]) représentant un motif mélodique (optionnel si musical avec youtube).
-   - "imagePrompt" : Une courte description textuelle de l'élément visuel à identifier.
-   - "trivia" : Une anecdote captivante, insolite ou croustillante ("Le savais-tu ?").
-   - "category" : La sous-catégorie précise de l'élément (ex: "Personnage", "Film", "Monument", "Acteur", "Jeu vidéo", "Groupe de musique", "Espèce animale"). Utilisée pour cibler la recherche d'images complémentaires en anglais.
-3. Pour le thème global :
-   - "themeTitle" : Un titre percutant pour le blind test.
-   - "themeDescription" : Une courte phrase d'accroche pour ce thème.
-   - "primaryColor" : Une couleur hex dominante adaptée (ex: "#ec4899", "#8b5cf6", "#f59e0b", "#10b981", "#3b82f6", "#ef4444").
-   - "accentColor" : Une couleur hex secondaire contrastée.
-   - "ambientSound" : L'un de ces choix sonores obligatoirement : "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature", "space".
+   - "question" : L'énoncé court adapté au mode.
+   - "options" : 4 propositions distinctes avec ordre aléatoire (la bonne réponse NE DOIT PAS être toujours en 1ère position).
+   - "correctAnswer" : La réponse exacte (identique à l'une des 4 options).
+   - "wikiSearchQuery" : Le nom précis pour trouver l'image de l'élément.
+   - "youtubeSearchQuery" : Le titre exact de l'OST ou musique.
+   - "clue" : Court indice (vide si blind test visuel).
+   - "audioNotes" : [261.63, 329.63, 392.0, 523.25] (4 à 6 fréquences Hertz).
+   - "imagePrompt" : Description courte.
+   - "trivia" : Anecdote captivante ("Le savais-tu ?").
+   - "category" : Sous-catégorie (ex: "Personnage", "Film", "Objet", "Lieu").
+3. Thème global :
+   - "themeTitle" : Titre percutant.
+   - "themeDescription" : Phrase d'accroche courte.
+   - "primaryColor" : Couleur hex (ex: "#8b5cf6", "#ec4899", "#3b82f6", "#10b981", "#f59e0b").
+   - "accentColor" : Couleur hex contrastée.
+   - "ambientSound" : "synthwave", "cinema", "retro80s", "fantasy", "electro", "jazzy", "nature" ou "space".
 
-Langue du contenu : ${language === 'fr' ? 'Français' : 'English'}.
-Niveau de difficulté : ${difficultyInstructions}`;
+Langue : Français. Niveau : ${difficultyInstructions}`;
 
-      const config = {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            topic: { type: Type.STRING },
-            themeTitle: { type: Type.STRING },
-            themeDescription: { type: Type.STRING },
-            primaryColor: { type: Type.STRING },
-            accentColor: { type: Type.STRING },
-            themeMusicQuery: {
-              type: Type.STRING,
-              description: 'Exact YouTube search query for the overall theme background soundtrack (e.g. "Harry Potter Hedwig Theme OST", "Star Wars Main Theme", "80s retro quiz game show music")'
-            },
-            ambientSound: {
-              type: Type.STRING,
-              description: 'One of: synthwave, cinema, retro80s, fantasy, electro, jazzy, nature, space'
-            },
-            themeBgImage: { type: Type.STRING },
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.INTEGER },
-                  question: { type: Type.STRING },
-                  options: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  correctAnswer: { type: Type.STRING },
-                  wikiSearchQuery: { type: Type.STRING },
-                  youtubeSearchQuery: { type: Type.STRING },
-                  clue: { type: Type.STRING },
-                  audioNotes: {
-                    type: Type.ARRAY,
-                    items: { type: Type.NUMBER }
-                  },
-                  imagePrompt: { type: Type.STRING },
-                  imageUrl: { type: Type.STRING },
-                  trivia: { type: Type.STRING },
-                  category: { type: Type.STRING }
+    const config = {
+      responseMimeType: 'application/json',
+      thinkingConfig: {
+        thinkingLevel: ThinkingLevel.MINIMAL,
+      },
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING },
+          themeTitle: { type: Type.STRING },
+          themeDescription: { type: Type.STRING },
+          primaryColor: { type: Type.STRING },
+          accentColor: { type: Type.STRING },
+          themeMusicQuery: { type: Type.STRING },
+          ambientSound: { type: Type.STRING },
+          themeBgImage: { type: Type.STRING },
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.INTEGER },
+                question: { type: Type.STRING },
+                options: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
                 },
-                required: ['id', 'question', 'options', 'correctAnswer', 'wikiSearchQuery', 'youtubeSearchQuery', 'clue', 'trivia']
+                correctAnswer: { type: Type.STRING },
+                wikiSearchQuery: { type: Type.STRING },
+                youtubeSearchQuery: { type: Type.STRING },
+                clue: { type: Type.STRING },
+                audioNotes: {
+                  type: Type.ARRAY,
+                  items: { type: Type.NUMBER }
+                },
+                imagePrompt: { type: Type.STRING },
+                imageUrl: { type: Type.STRING },
+                trivia: { type: Type.STRING },
+                category: { type: Type.STRING }
+              },
+              required: ['id', 'question', 'options', 'correctAnswer', 'clue', 'trivia']
+            }
+          }
+        },
+        required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
+      }
+    };
+
+    let parsedData: any = null;
+
+    if (apiKey) {
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      // Ultra-fast lightweight models first
+      const candidateModels = [
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-3.7-flash',
+      ];
+
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: config
+          });
+
+          if (response && response.text) {
+            let str = response.text.trim();
+            str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+            try {
+              parsedData = JSON.parse(str);
+            } catch {
+              const match = str.match(/\{[\s\S]*\}/);
+              if (match) {
+                parsedData = JSON.parse(match[0]);
               }
             }
-          },
-          required: ['themeTitle', 'themeDescription', 'primaryColor', 'accentColor', 'ambientSound', 'questions']
-        }
-      };
-
-        const candidateModels = [
-          'gemini-2.5-flash',
-          'gemini-2.5-flash-lite',
-          'gemini-3.7-flash',
-          'gemini-flash-latest',
-        ];
-        let response: any = null;
-        let lastError: any = null;
-
-        for (const modelName of candidateModels) {
-          try {
-            response = await ai.models.generateContent({
-              model: modelName,
-              contents: prompt,
-              config: config
-            });
-            if (response && response.text) {
-              console.log(`Successfully generated quiz with model: ${modelName}`);
+            if (parsedData && Array.isArray(parsedData.questions) && parsedData.questions.length > 0) {
+              console.log(`Successfully generated quiz with ultra-fast model: ${modelName}`);
               break;
             }
-          } catch (err: any) {
-            lastError = err;
-            console.warn(`Model ${modelName} failed (${err.message || err}), falling back to next available model...`);
           }
+        } catch (err: any) {
+          console.warn(`Model ${modelName} encountered an error, trying next fast model:`, err.message || err);
         }
-
-        // Robust JSON extraction and cleaning
-        const cleanAndParseJSON = (raw: string) => {
-          let str = raw.trim();
-          str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-          try {
-            return JSON.parse(str);
-          } catch {
-            const match = str.match(/\{[\s\S]*\}/);
-            if (match) {
-              return JSON.parse(match[0]);
-            }
-            throw new Error('Format JSON invalide reçu du modèle IA.');
-          }
-        };
-
-        if (!response || !response.text) {
-          console.warn('All AI models failed or quota exceeded:', lastError?.message);
-          console.log('Engaging high-fidelity dynamic fallback generator for topic:', topic);
-          parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
-          quotaExceededNotice = true;
-        } else {
-          try {
-            parsedData = cleanAndParseJSON(response.text);
-          } catch (parseErr) {
-            console.warn('JSON parsing error from AI response, using dynamic fallback generator:', parseErr);
-            parsedData = generateDynamicFallbackQuiz(topic, gameMode, difficulty, language);
-            quotaExceededNotice = true;
-          }
-        }
-      }
-
-      // Helper function to shuffle options randomly
-      const shuffle = <T>(arr: T[]): T[] => {
-        const result = [...arr];
-        for (let i = result.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [result[i], result[j]] = [result[j], result[i]];
-        }
-        return result;
-      };
-
-      // Fetch authentic image for theme background first
-      const themeWikiImg = await fetchDDGImage(parsedData.themeTitle || topic, topic, topic, 0);
-      if (themeWikiImg) {
-        parsedData.themeBgImage = themeWikiImg;
-      } else if (!parsedData.themeBgImage || !parsedData.themeBgImage.startsWith('http')) {
-        parsedData.themeBgImage = 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png';
-      }
-
-      // Fetch authentic images for all 15 questions in parallel
-      if (Array.isArray(parsedData.questions)) {
-        // Preload ytSearch if needed
-        let ytSearchFn: any = null;
-        if (gameMode === 'music_blind_test') {
-          const ytSearch = await import('yt-search');
-          ytSearchFn = ytSearch.default || ytSearch;
-        }
-
-        const isQuizOnly = gameMode === 'quiz';
-        const topicImageUrl = parsedData.themeBgImage;
-
-        const processedQuestions = await Promise.all(
-          parsedData.questions.map(async (q: any, idx: number) => {
-            let finalImg1 = topicImageUrl;
-            let finalImg2: string | undefined = undefined;
-            let secondImgSource = 'Wikipedia';
-
-            // In quiz mode: use a procedural generation for unique images per question based on the topic without spoiling the answer
-            if (isQuizOnly) {
-              const styles = [
-                'cinematic atmospheric', 'minimalist aesthetic', 'epic lighting', 'retro vintage', 
-                'abstract geometric', 'neon cyberpunk', 'watercolor illustration', 'dark mood',
-                'bright colorful', 'surreal dreamscape', 'oil painting style', 'pencil sketch style',
-                '3d render octane', 'low poly flat', 'golden hour photography'
-              ];
-              const style = styles[idx % styles.length];
-              finalImg1 = `https://image.pollinations.ai/prompt/${encodeURIComponent(topic + ' ' + style)}?width=1280&height=720&seed=${idx * 43 + 7}&nologo=true`;
-            } else {
-              const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
-              
-              // Parallel fetch: Image 1 (Web engine) and Image 2 (Wikipedia / Wikimedia / Alternative search with category+answer)
-              const [wikiImg, secondImgData] = await Promise.all([
-                fetchDDGImage(primaryQuery, q.correctAnswer, topic, 0),
-                fetchSecondImage(primaryQuery, q.correctAnswer, q.category || '', topic)
-              ]);
-
-              // Primary Image fallback
-              finalImg1 = wikiImg || secondImgData.url || topicImageUrl || `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`;
-              // Secondary Image (guaranteed different angle/source or alternate query)
-              finalImg2 = (secondImgData.url && secondImgData.url !== finalImg1) 
-                ? secondImgData.url 
-                : (await fetchDDGImage(primaryQuery, q.correctAnswer, topic, 1)) || finalImg1;
-              secondImgSource = secondImgData.source || 'Alternative';
-            }
-
-            // If music blind test and youtube query provided, search youtube
-            let youtubeVideoIds = [];
-            if (gameMode === 'music_blind_test' && q.youtubeSearchQuery && ytSearchFn) {
-              try {
-                if (ytCache.has(q.youtubeSearchQuery)) {
-                  youtubeVideoIds = ytCache.get(q.youtubeSearchQuery).videoIds || [ytCache.get(q.youtubeSearchQuery).videoId];
-                } else {
-                  const r = await ytSearchFn(q.youtubeSearchQuery);
-                  if (r.videos && r.videos.length > 0) {
-                    youtubeVideoIds = r.videos.slice(0, 5).map(v => v.videoId);
-                    ytCache.set(q.youtubeSearchQuery, { videoIds: youtubeVideoIds, videoId: youtubeVideoIds[0], title: r.videos[0].title });
-                  }
-                }
-              } catch (e) {
-                console.error('Failed to fetch youtube video for', q.youtubeSearchQuery, e);
-              }
-            }
-
-            // Guarantee options contain the correct answer and are shuffled
-            let optionsList: string[] = Array.isArray(q.options) ? [...q.options] : [];
-            if (!optionsList.includes(q.correctAnswer)) {
-              optionsList[0] = q.correctAnswer;
-            }
-            optionsList = shuffle(optionsList);
-
-            return {
-              ...q,
-              id: idx + 1,
-              options: optionsList,
-              imageUrl: finalImg1,
-              secondaryImageUrl: isQuizOnly ? undefined : finalImg2,
-              secondaryImageSource: isQuizOnly ? 'Wikipedia' : secondImgSource,
-              youtubeVideoId: youtubeVideoIds[0],
-              youtubeVideoIds: youtubeVideoIds,
-              imagePrompt: isQuizOnly ? (parsedData.themeTitle || topic) : (q.imagePrompt || q.correctAnswer),
-              audioNotes: Array.isArray(q.audioNotes) && q.audioNotes.length > 0
-                ? q.audioNotes
-                : [330, 392, 440, 523.25, 659.25, 587.33]
-            };
-          })
-        );
-        parsedData.questions = processedQuestions;
-      }
-
-      // Fetch theme YouTube soundtrack for quiz background music
-      try {
-        const themeMusicTerm = parsedData.themeMusicQuery || `${parsedData.themeTitle || topic} soundtrack ost theme`;
-        if (themeMusicTerm) {
-          if (ytCache.has(themeMusicTerm.toLowerCase())) {
-            parsedData.themeYoutubeVideoId = ytCache.get(themeMusicTerm.toLowerCase()).videoId;
-          } else {
-            const ytSearch = await import('yt-search');
-            const searchFn: any = ytSearch.default || ytSearch;
-            const r = await searchFn(themeMusicTerm);
-            const video = r.videos[0];
-            if (video) {
-              parsedData.themeYoutubeVideoId = video.videoId;
-              ytCache.set(themeMusicTerm.toLowerCase(), { videoId: video.videoId, title: video.title });
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to pre-fetch theme YouTube soundtrack', e);
-      }
-
-      parsedData.topic = topic;
-      parsedData.quotaExceededNotice = quotaExceededNotice;
-      parsedData.fallbackUsed = quotaExceededNotice;
-
-      // Update total generations statistic & broadcast
-      totalGenerations += 1;
-      broadcastGlobalStats();
-
-      return res.json(parsedData);
-    } catch (err: any) {
-      console.error('Error generating quiz, engaging emergency safety fallback:', err);
-      try {
-        const emergencyData = generateDynamicFallbackQuiz(
-          (req.body?.topic || 'Culture Générale'),
-          req.body?.gameMode || 'quiz',
-          req.body?.difficulty || 'medium',
-          req.body?.language || 'fr'
-        );
-        emergencyData.quotaExceededNotice = true;
-        emergencyData.fallbackUsed = true;
-
-        totalGenerations += 1;
-        broadcastGlobalStats();
-
-        return res.json(emergencyData);
-      } catch (fallbackErr) {
-        const isQuota = err.message?.includes('resource_exhausted') || err.message?.includes('Quota exceeded') || err.message?.includes('429');
-        const errorMsg = isQuota
-          ? 'Quota Gemini dépassé (limite de requêtes/tokens atteinte). Veuillez patienter quelques instants avant de réessayer.'
-          : ('Erreur lors de la génération du quiz: ' + (err.message || 'Erreur interne'));
-        return res.status(500).json({ error: errorMsg });
       }
     }
+
+    // Seamless instant fallback if Gemini is not configured, rate-limited, or failed
+    if (!parsedData || !Array.isArray(parsedData.questions) || parsedData.questions.length === 0) {
+      console.warn('Using instant fallback quiz generator for topic:', topic);
+      parsedData = generateFallbackQuiz(topic, gameMode as any, difficulty as any);
+    }
+
+    // Helper function to shuffle options randomly
+    const shuffle = <T>(arr: T[]): T[] => {
+      const result = [...arr];
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+      }
+      return result;
+    };
+
+    // Fast non-blocking media pre-fetching with strict timeouts (1.2s max)
+    if (Array.isArray(parsedData.questions)) {
+      let ytSearchFn: any = null;
+      if (gameMode === 'music_blind_test') {
+        try {
+          const ytSearch = await import('yt-search');
+          ytSearchFn = ytSearch.default || ytSearch;
+        } catch {}
+      }
+
+      const processedQuestions = await Promise.all(
+        parsedData.questions.map(async (q: any, idx: number) => {
+          const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
+          
+          let finalImg1 = q.imageUrl || `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`;
+          let finalImg2 = q.secondaryImageUrl || finalImg1;
+          let secondarySource = 'Web (EN)';
+
+          try {
+            const results = await Promise.allSettled([
+              fetchDDGImage(primaryQuery, q.correctAnswer, topic, 0),
+              fetchSecondImage(primaryQuery, q.correctAnswer, q.category || '', topic)
+            ]);
+
+            const wikiImg = results[0].status === 'fulfilled' ? results[0].value : null;
+            const secondData = results[1].status === 'fulfilled' ? results[1].value : null;
+
+            if (wikiImg) finalImg1 = wikiImg;
+            else if (secondData?.url) finalImg1 = secondData.url;
+
+            if (secondData?.url && secondData.url !== finalImg1) {
+              finalImg2 = secondData.url;
+              secondarySource = secondData.source || 'Web (EN)';
+            } else {
+              finalImg2 = finalImg1;
+            }
+          } catch {}
+
+          let youtubeVideoIds: string[] = [];
+          if (gameMode === 'music_blind_test' && q.youtubeSearchQuery && ytSearchFn) {
+            try {
+              if (ytCache.has(q.youtubeSearchQuery)) {
+                const cached = ytCache.get(q.youtubeSearchQuery)!;
+                youtubeVideoIds = cached.videoIds || [cached.videoId];
+              } else {
+                const r = await Promise.race([
+                  ytSearchFn(q.youtubeSearchQuery),
+                  new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+                ]);
+                if (r && r.videos && r.videos.length > 0) {
+                  youtubeVideoIds = r.videos.slice(0, 4).map((v: any) => v.videoId);
+                  ytCache.set(q.youtubeSearchQuery, { videoIds: youtubeVideoIds, videoId: youtubeVideoIds[0], title: r.videos[0].title });
+                }
+              }
+            } catch {}
+          }
+
+          let optionsList: string[] = Array.isArray(q.options) ? [...q.options] : [];
+          if (!optionsList.includes(q.correctAnswer)) {
+            optionsList[0] = q.correctAnswer;
+          }
+          optionsList = shuffle(optionsList);
+
+          return {
+            ...q,
+            id: idx + 1,
+            options: optionsList,
+            imageUrl: finalImg1,
+            secondaryImageUrl: finalImg2,
+            secondaryImageSource: secondarySource,
+            youtubeVideoId: youtubeVideoIds[0] || q.youtubeVideoId,
+            youtubeVideoIds: youtubeVideoIds.length > 0 ? youtubeVideoIds : (q.youtubeVideoIds || []),
+            imagePrompt: q.imagePrompt || q.correctAnswer,
+            audioNotes: Array.isArray(q.audioNotes) && q.audioNotes.length > 0
+              ? q.audioNotes
+              : [330, 392, 440, 523.25, 659.25, 587.33]
+          };
+        })
+      );
+      parsedData.questions = processedQuestions;
+    }
+
+    parsedData.topic = topic;
+    return res.json(parsedData);
   });
 
   // Room API check endpoint
   app.get('/api/room/:code', (req, res) => {
-        const code = (req.params.code || '').toUpperCase().trim();
-        const room = activeRooms.get(code);
-        if (!room) {
-          return res.status(404).json({ exists: false, error: 'Salon introuvable' });
-        }
-        return res.json({
-          exists: true,
-          room: {
-            code: room.code,
-            topic: room.topic,
-            themeTitle: room.themeTitle,
-            status: room.status,
-            difficulty: room.difficulty,
-            gameMode: room.gameMode,
-            language: room.language,
-            playerCount: room.players.size,
-            hostId: room.hostId,
-          }
-        });
-      });
+    const code = (req.params.code || '').toUpperCase().trim();
+    const room = activeRooms.get(code);
+    if (!room) {
+      return res.status(404).json({ exists: false, error: 'Salon introuvable' });
+    }
+    return res.json({
+      exists: true,
+      room: {
+        code: room.code,
+        topic: room.topic,
+        themeTitle: room.themeTitle,
+        status: room.status,
+        difficulty: room.difficulty,
+        gameMode: room.gameMode,
+        playerCount: room.players.size,
+        hostId: room.hostId,
+      }
+    });
+  });
 
   // WebSocket Multiplayer Server Logic
   wss.on('connection', (ws) => {
-    connectedSockets.add(ws);
-    // Send immediate global stats to newly connected client
-    ws.send(JSON.stringify({ type: 'global_stats', stats: getGlobalStats() }));
-    broadcastGlobalStats();
-
     let clientRoomCode: string | null = null;
     let clientPlayerId: string | null = null;
 
@@ -1236,7 +760,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
 
         // CREATE ROOM
         if (type === 'create_room') {
-          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', language = 'fr', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20, isPublic = true } = data;
+          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -1268,12 +792,10 @@ Niveau de difficulté : ${difficultyInstructions}`;
             difficulty,
             gameMode,
             gameStyle,
-            language,
             durationPerQuestion: durationPerQuestion || 20,
             currentQuestionIndex: 0,
             questionStartTime: 0,
             quizData,
-            isPublic: isPublic !== false,
             players: new Map([[hostId, hostPlayer]]),
             createdAt: Date.now(),
           };
@@ -1282,43 +804,12 @@ Niveau de difficulté : ${difficultyInstructions}`;
           clientRoomCode = code;
           clientPlayerId = hostId;
 
-          broadcastGlobalStats();
-
           ws.send(JSON.stringify({
             type: 'room_created',
             code,
             playerId: hostId,
             room: serializeRoom(newRoom),
           }));
-        }
-
-        // GET PUBLIC ROOMS
-        else if (type === 'get_public_rooms') {
-          const { language, gameMode } = data;
-          ws.send(JSON.stringify({
-            type: 'public_rooms_list',
-            rooms: getPublicRoomsSummary(language, gameMode),
-          }));
-        }
-
-        // TOGGLE PUBLIC ROOM (Host toggles public listing)
-        else if (type === 'toggle_public_room') {
-          const { code: rawCode, isPublic } = data;
-          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
-          const room = activeRooms.get(code);
-          if (!room) return;
-          if (clientPlayerId && clientPlayerId !== room.hostId) return;
-
-          room.isPublic = Boolean(isPublic);
-          const serialized = serializeRoom(room);
-          broadcastToRoom(room, {
-            type: 'room_state',
-            room: serialized,
-          });
-          broadcastToRoom(room, {
-            type: 'room_updated',
-            room: serialized,
-          });
         }
 
         // JOIN ROOM
@@ -1449,42 +940,18 @@ Niveau de difficulté : ${difficultyInstructions}`;
 
         // SUBMIT ANSWER
         else if (type === 'submit_answer') {
-          const { code: rawCode, questionIndex, selectedOption, timeSpent = 0, playerId: passedPlayerId } = data;
+          const { code: rawCode, questionIndex, selectedOption, timeSpent = 0 } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
-          if (!room) return;
+          if (!room || !clientPlayerId) return;
 
-          const effectivePlayerId = passedPlayerId || clientPlayerId;
-          if (!effectivePlayerId) return;
+          const player = room.players.get(clientPlayerId);
+          if (!player || player.answeredCurrent) return;
 
-          let player = room.players.get(effectivePlayerId);
-          if (!player) {
-            // Check if player ID matches any player in the room or socket
-            for (const [id, p] of room.players.entries()) {
-              if (id === effectivePlayerId || p.ws === ws) {
-                player = p;
-                break;
-              }
-            }
-          }
-          if (!player) return;
-
-          // Re-associate socket and IDs
-          player.ws = ws;
-          clientPlayerId = player.id;
-          clientRoomCode = code;
-
-          if (player.answeredCurrent) return;
-
-          const qIdx = (typeof questionIndex === 'number' && questionIndex >= 0)
-            ? questionIndex
-            : room.currentQuestionIndex;
-          if (qIdx !== room.currentQuestionIndex) return;
-          const currentQ = room.quizData?.questions?.[qIdx] || room.quizData?.questions?.[room.currentQuestionIndex];
+          const currentQ = room.quizData?.questions?.[questionIndex];
           if (!currentQ) return;
 
-          const normalizeStr = (s: any) => (s || '').toString().trim().toLowerCase();
-          const isCorrect = normalizeStr(selectedOption) === normalizeStr(currentQ.correctAnswer);
+          const isCorrect = selectedOption === currentQ.correctAnswer;
           let earned = 0;
 
           if (isCorrect) {
@@ -1499,9 +966,7 @@ Niveau de difficulté : ${difficultyInstructions}`;
             else if (player.streak >= 2) multiplier = 1.5;
 
             // Speed bonus: from 500 to 1000 base
-            const duration = room.durationPerQuestion || 15;
-            const validTimeSpent = typeof timeSpent === 'number' ? Math.max(0.1, timeSpent) : 1;
-            const speedRatio = Math.max(0, 1 - (validTimeSpent / duration));
+            const speedRatio = Math.max(0, 1 - (timeSpent / (room.durationPerQuestion || 20)));
             const basePoints = 500 + Math.round(500 * speedRatio);
             earned = Math.round(basePoints * multiplier);
             player.score += earned;
@@ -1512,23 +977,28 @@ Niveau de difficulté : ${difficultyInstructions}`;
           player.answeredCurrent = true;
           player.isCorrect = isCorrect;
           player.selectedOption = selectedOption;
-          player.timeSpent = typeof timeSpent === 'number' ? Math.round(timeSpent * 10) / 10 : 1;
+          player.timeSpent = timeSpent;
           player.lastScoreEarned = earned;
 
           if (!player.answersHistory) player.answersHistory = {};
-          player.answersHistory[qIdx] = {
+          player.answersHistory[questionIndex] = {
             selectedOption: selectedOption || '',
             isCorrect,
-            timeSpent: player.timeSpent,
+            timeSpent,
             scoreEarned: earned,
           };
 
-          if (room.isBotRoom) {
-            broadcastToRoom(room, {
-              type: 'player_answered',
-              playerId: player.id,
-              room: serializeRoom(room),
-            });
+          // Check if all connected players in room have submitted an answer
+          let allAnswered = true;
+          room.players.forEach((p) => {
+            if (p.ws && p.ws.readyState === WebSocket.OPEN && !p.answeredCurrent) {
+              allAnswered = false;
+            }
+          });
+
+          if (allAnswered) {
+            triggerRevealQuestion(room);
+          } else {
             broadcastToRoom(room, {
               type: 'room_state',
               room: serializeRoom(room),
@@ -1537,41 +1007,6 @@ Niveau de difficulté : ${difficultyInstructions}`;
               type: 'room_updated',
               room: serializeRoom(room),
             });
-
-            // Check if all players (bots + humans) have answered
-            let allDone = true;
-            room.players.forEach((p) => {
-              if (!p.answeredCurrent) allDone = false;
-            });
-            if (allDone) {
-              revealBotRoomQuestion(room, qIdx);
-            }
-          } else {
-            // Check if all connected players in room have submitted an answer
-            let allAnswered = true;
-            room.players.forEach((p) => {
-              if (p.ws && p.ws.readyState === WebSocket.OPEN && !p.answeredCurrent) {
-                allAnswered = false;
-              }
-            });
-
-            if (allAnswered) {
-              triggerRevealQuestion(room);
-            } else {
-              broadcastToRoom(room, {
-                type: 'player_answered',
-                playerId: player.id,
-                room: serializeRoom(room),
-              });
-              broadcastToRoom(room, {
-                type: 'room_state',
-                room: serializeRoom(room),
-              });
-              broadcastToRoom(room, {
-                type: 'room_updated',
-                room: serializeRoom(room),
-              });
-            }
           }
         }
 
@@ -1605,28 +1040,6 @@ Niveau de difficulté : ${difficultyInstructions}`;
             room: serializeRoom(room),
             playerId: targetPlayerId,
           }));
-        }
-
-        // UPDATE ROOM SETTINGS (Host changes gameMode, difficulty, duration)
-        else if (type === 'update_room_settings') {
-          const { code: rawCode, gameMode, difficulty, durationPerQuestion } = data;
-          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
-          const room = activeRooms.get(code);
-          if (!room || clientPlayerId !== room.hostId) return;
-
-          if (gameMode) room.gameMode = gameMode;
-          if (difficulty) room.difficulty = difficulty;
-          if (durationPerQuestion) room.durationPerQuestion = durationPerQuestion;
-
-          const serialized = serializeRoom(room);
-          broadcastToRoom(room, {
-            type: 'room_state',
-            room: serialized,
-          });
-          broadcastToRoom(room, {
-            type: 'room_updated',
-            room: serialized,
-          });
         }
 
         // UPDATE PLAYER PROFILE (Host or Guest)
@@ -1721,13 +1134,10 @@ Niveau de difficulté : ${difficultyInstructions}`;
 
         // RESTART WITH NEW QUIZ TOPIC
         else if (type === 'restart_with_quiz') {
-          const { code: rawCode, quizData, gameMode, difficulty } = data;
+          const { code: rawCode, quizData } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
           if (!room || clientPlayerId !== room.hostId) return;
-
-          if (gameMode) room.gameMode = gameMode;
-          if (difficulty) room.difficulty = difficulty;
 
           if (quizData) {
             room.quizData = quizData;
@@ -1756,10 +1166,6 @@ Niveau de difficulté : ${difficultyInstructions}`;
             type: 'room_state',
             room: serializeRoom(room),
           });
-          broadcastToRoom(room, {
-            type: 'room_updated',
-            room: serializeRoom(room),
-          });
         }
 
         // LEAVE ROOM
@@ -1770,11 +1176,10 @@ Niveau de difficulté : ${difficultyInstructions}`;
           if (!room || !clientPlayerId) return;
 
           room.players.delete(clientPlayerId);
-          if (room.players.size === 0 && !room.isBotRoom) {
+          if (room.players.size === 0) {
             activeRooms.delete(code);
-            broadcastGlobalStats();
           } else {
-            if (room.hostId === clientPlayerId && !room.isBotRoom) {
+            if (room.hostId === clientPlayerId) {
               // Assign new host
               const nextHostId = room.players.keys().next().value;
               if (nextHostId) {
@@ -1791,20 +1196,12 @@ Niveau de difficulté : ${difficultyInstructions}`;
           clientRoomCode = null;
           clientPlayerId = null;
         }
-
-        // GET STATS
-        else if (type === 'get_stats') {
-          ws.send(JSON.stringify({ type: 'global_stats', stats: getGlobalStats() }));
-        }
       } catch (err) {
         console.error('WebSocket message parsing error:', err);
       }
     });
 
     ws.on('close', () => {
-      connectedSockets.delete(ws);
-      broadcastGlobalStats();
-
       if (clientRoomCode && clientPlayerId) {
         const room = activeRooms.get(clientRoomCode);
         if (room) {

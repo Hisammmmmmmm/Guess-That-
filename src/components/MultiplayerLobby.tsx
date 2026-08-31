@@ -20,8 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
-import { t, languages } from '../i18n/translations';
-import { FlagIcon } from './FlagIcon';
+import { t } from '../i18n/translations';
 
 interface MultiplayerLobbyProps {
   language?: string;
@@ -344,10 +343,6 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               {roomState.themeTitle || roomState.topic}
             </h2>
             <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/70">
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 text-white" title={t('room_language', language)}>
-                <FlagIcon code={roomState.language || 'fr'} className="w-4 h-3 rounded-xs" />
-                <span className="font-semibold">{languages.find(l => l.code === roomState.language)?.name || 'Français'}</span>
-              </span>
               <span>⏱️ {roomState.durationPerQuestion || 20}s / question</span>
               <span>🎯 {questionsCount > 0 ? `${questionsCount} ${t('questions_ready', language)}` : t('loading_questions', language)}</span>
             </div>

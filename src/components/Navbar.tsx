@@ -1,25 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Volume2,
   VolumeX,
-  Music,
-  Music2,
   Sliders,
   Sparkles,
   ArrowLeft,
-  Flame,
-  HelpCircle,
   Gamepad2,
   Gauge,
   Hash,
   Pause,
-  Play,
-  Globe
+  Play
 } from 'lucide-react';
 import { GameSettings, QuizData, GameScreen, RoomState } from '../types';
 import { soundEngine } from '../services/soundEngine';
-import { t, languages } from '../i18n/translations';
-import { FlagIcon } from './FlagIcon';
+import { t } from '../i18n/translations';
 
 interface NavbarProps {
   currentScreen: GameScreen;
@@ -46,8 +40,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   isPaused,
   onTogglePause,
 }) => {
-  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
-
   const toggleSound = () => {
     soundEngine.unlockAudio();
     const isMuted = !settings.soundEffectsEnabled && !settings.musicEnabled;
@@ -62,9 +54,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       musicEnabled: nextState,
     });
   };
-
-  const currentLang = languages.find(l => l.code === settings.language) || languages[0];
-  const roomLang = roomState ? (languages.find(l => l.code === roomState.language) || languages[0]) : null;
 
   return (
     <header className={`fixed top-0 z-40 w-full transition-all duration-300 ${currentScreen === 'playing' ? 'bg-transparent' : 'backdrop-blur-2xl bg-[#0F0A1F]/80 border-b border-white/10'}`}>
@@ -82,32 +71,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 text-white/90 hover:text-white border border-white/15 text-xs font-bold transition-all cursor-pointer backdrop-blur-md shadow-md shrink-0"
               >
                 <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-                <span className="hidden sm:inline">{t('quit', settings.language)}</span>
+                <span className="hidden sm:inline">{t('quit')}</span>
               </button>
               
               {/* Game Info Badge */}
               <div className="flex items-center gap-1.5 sm:gap-2.5 px-3 py-1.5 sm:py-2 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md text-[9px] sm:text-xs">
-                {roomLang && (
-                  <>
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-purple-500/20 border border-purple-400/30 text-purple-200" title={`${t('room_language', settings.language)}: ${roomLang.name}`}>
-                      <span className="text-[9px] uppercase tracking-wider text-purple-300 font-bold hidden sm:inline">{t('room_language', settings.language)}:</span>
-                      <FlagIcon code={roomLang.code} className="w-4 h-3 rounded-xs" />
-                      <span className="font-bold text-white text-[10px]">{roomLang.name}</span>
-                    </div>
-                    <span className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
-                  </>
-                )}
                 <span className="flex items-center gap-1 text-white/70">
                   <Gamepad2 className="w-3.5 h-3.5 text-indigo-400 hidden lg:block" />
                   <span className="font-semibold text-white">
-                    {t(settings.gameMode, settings.language)}
+                    {t(settings.gameMode)}
                   </span>
                 </span>
                 <span className="w-1 h-1 rounded-full bg-white/20 shrink-0" />
                 <span className="flex items-center gap-1 text-white/70">
                   <Gauge className="w-3.5 h-3.5 text-amber-400 hidden lg:block" />
                   <span className="font-semibold text-white">
-                    {t(settings.difficulty, settings.language)}
+                    {t(settings.difficulty)}
                   </span>
                 </span>
                 {quizData && (
@@ -138,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Guess<span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">That!</span>
                 </span>
                 <span className="text-[10px] text-white/50 -mt-1 font-semibold hidden sm:inline">
-                  {t('app_subtitle', settings.language)}
+                  {t('app_subtitle')}
                 </span>
               </div>
             </div>
@@ -154,43 +133,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onTogglePause?.();
               }}
               className="p-2.5 px-4 rounded-2xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-bold backdrop-blur-md shadow-md bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
-              title={isPaused ? t('resume', settings.language) : t('pause', settings.language)}
+              title={isPaused ? t('resume') : t('pause')}
             >
               {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-              <span className="hidden sm:inline">{isPaused ? t('resume', settings.language) : t('pause', settings.language)}</span>
+              <span className="hidden sm:inline">{isPaused ? t('resume') : t('pause')}</span>
             </button>
           )}
-
-          {/* Language Selector */}
-          <div className="relative">
-            <button
-              onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-              className="p-2.5 px-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-bold backdrop-blur-md shadow-md bg-white/5 border-white/10 text-white/90 hover:bg-white/10 hover:text-white"
-              title={t('language', settings.language)}
-              id="btn-language-selector"
-            >
-              <FlagIcon code={currentLang.code} className="w-5 h-3.5 rounded-xs" />
-              <span className="hidden sm:inline text-xs font-bold uppercase text-white/80">{currentLang.code}</span>
-            </button>
-            
-            {isLangMenuOpen && (
-              <div className="absolute top-full mt-2 right-0 bg-[#0F0A1F] border border-white/10 rounded-2xl shadow-xl overflow-hidden py-1 min-w-[140px] z-50">
-                {languages.map(lang => (
-                  <button
-                    key={lang.code}
-                    onClick={() => {
-                      onUpdateSettings({ language: lang.code });
-                      setIsLangMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-3.5 py-2 text-xs hover:bg-white/10 flex items-center gap-2.5 transition-colors ${settings.language === lang.code ? 'bg-purple-500/20 text-purple-300 font-bold' : 'text-white/80'}`}
-                  >
-                    <FlagIcon code={lang.code} className="w-4 h-3 rounded-xs" />
-                    <span>{lang.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Quick Sound Toggle */}
           <button
@@ -201,17 +149,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 hover:bg-purple-500/30'
                 : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'
             }`}
-            title={t('toggle_sound', settings.language)}
+            title={t('toggle_sound')}
           >
             {settings.soundEffectsEnabled || settings.musicEnabled ? (
               <>
                 <Volume2 className="w-4 h-4 text-emerald-400" />
-                <span className="hidden lg:inline text-[11px]">{t('sound_active', settings.language)}</span>
+                <span className="hidden lg:inline text-[11px]">{t('sound_active')}</span>
               </>
             ) : (
               <>
                 <VolumeX className="w-4 h-4 text-white/40" />
-                <span className="hidden lg:inline text-[11px]">{t('muted', settings.language)}</span>
+                <span className="hidden lg:inline text-[11px]">{t('muted')}</span>
               </>
             )}
           </button>
@@ -225,10 +173,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
             id="btn-open-settings"
             className="p-2.5 px-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-white/90 hover:text-white transition-all cursor-pointer flex items-center gap-2 backdrop-blur-md shadow-md"
-            title={t('game_settings', settings.language)}
+            title={t('game_settings')}
           >
             <Sliders className="w-4 h-4 text-purple-400" />
-            <span className="text-xs font-bold hidden sm:inline">{t('options', settings.language)}</span>
+            <span className="text-xs font-bold hidden sm:inline">{t('options')}</span>
           </button>
         </div>
       </div>

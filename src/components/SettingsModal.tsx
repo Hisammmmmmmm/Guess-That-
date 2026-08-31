@@ -8,8 +8,6 @@ import {
   Check,
   Zap,
   Radio,
-  Sparkles,
-  VolumeX,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameSettings } from '../types';
@@ -142,12 +140,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg sm:text-xl font-black text-white font-heading">
-                  {t('settings_customization', settings.language)}
+                  {t('settings_customization')}
                 </h3>
                 <p className="text-xs text-white/60">
-                  {settings.language === 'fr' 
-                    ? 'Gestion des volumes sonores & configuration de ton pseudo'
-                    : 'Sound volumes management & player profile customization'}
+                  Gestion des volumes sonores & configuration de ton pseudo
                 </p>
               </div>
             </div>
@@ -166,17 +162,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-white">
                 <User className="w-4 h-4 text-purple-400" />
-                <span>{t('your_nickname', settings.language)}</span>
+                <span>{t('your_nickname')}</span>
               </div>
               <span className="text-[11px] font-bold text-purple-300/80 bg-purple-500/20 px-2 py-0.5 rounded-full border border-purple-500/30">
-                {settings.language === 'fr' ? 'Hôte & Joueur' : 'Host & Player'}
+                Hôte & Joueur
               </span>
             </div>
 
             <p className="text-[11px] text-white/60 -mt-1 leading-relaxed">
-              {settings.language === 'fr'
-                ? 'Ce pseudo remplacera la mention "Hôte" et sera affiché dans les classements et salons.'
-                : 'This nickname replaces "Host" and is displayed in game scoreboards and lobbies.'}
+              Ce pseudo remplacera la mention "Hôte" et sera affiché dans les classements et salons.
             </p>
 
             <div className="flex items-center gap-3">
@@ -190,7 +184,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   value={localName}
                   maxLength={24}
                   onChange={handleNameChange}
-                  placeholder={t('nickname_placeholder', settings.language)}
+                  placeholder={t('nickname_placeholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all placeholder:text-white/30"
                 />
               </div>
@@ -199,7 +193,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Quick Avatar Presets */}
             <div className="flex flex-col gap-1.5 mt-1">
               <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
-                {t('choose_avatar', settings.language)} :
+                {t('choose_avatar')} :
               </span>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                 {AVATAR_PRESETS.map((emoji) => (
@@ -225,7 +219,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-black text-white">
                 <Volume2 className="w-4 h-4 text-emerald-400" />
-                <span>{t('sound_volume_management', settings.language)}</span>
+                <span>{t('sound_volume_management')}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -257,7 +251,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-white/5 border border-white/10">
               <div className="flex items-center justify-between text-xs text-white/90 font-semibold">
                 <span className="flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-purple-400" /> {t('master_volume', settings.language)}
+                  <Volume2 className="w-3.5 h-3.5 text-purple-400" /> {t('master_volume')}
                 </span>
                 <span className="font-mono text-purple-300 font-black">{Math.round((settings.masterVolume ?? 1.0) * 100)}%</span>
               </div>
@@ -277,11 +271,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between text-xs text-white/90 font-semibold">
                 <span className="flex items-center gap-1.5">
                   <Music className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>
-                    {settings.language === 'fr' ? 'Musique du Menu (Ambiance)' : 'Menu Music (Ambience)'}
-                  </span>
+                  <span>Musique du Menu (Ambiance)</span>
                   <span className="text-[10px] font-normal text-indigo-300/70 bg-indigo-500/10 px-1.5 py-0.2 rounded border border-indigo-500/20">
-                    {settings.language === 'fr' ? '10% défaut' : '10% def'}
+                    10% défaut
                   </span>
                 </span>
                 <span className="font-mono text-indigo-300 font-black">{Math.round((settings.menuMusicVolume ?? 0.1) * 100)}%</span>
@@ -302,11 +294,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between text-xs text-white/90 font-semibold">
                 <span className="flex items-center gap-1.5">
                   <Radio className="w-3.5 h-3.5 text-pink-400" />
-                  <span>
-                    {settings.language === 'fr' ? 'Musiques YouTube en Jeu (Questions)' : 'In-Game YouTube Music'}
-                  </span>
+                  <span>Musiques YouTube en Jeu (Questions)</span>
                   <span className="text-[10px] font-normal text-pink-300/70 bg-pink-500/10 px-1.5 py-0.2 rounded border border-pink-500/20">
-                    {settings.language === 'fr' ? '80% défaut' : '80% def'}
+                    80% défaut
                   </span>
                 </span>
                 <span className="font-mono text-pink-400 font-black">{Math.round((settings.questionMusicVolume ?? 0.8) * 100)}%</span>
@@ -327,7 +317,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between text-xs text-white/90 font-semibold">
                 <span className="flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>{t('sound_effects_desc', settings.language)}</span>
+                  <span>{t('sound_effects_desc')}</span>
                 </span>
                 <span className="font-mono text-yellow-400 font-black">{Math.round((settings.sfxVolume ?? 0.85) * 100)}%</span>
               </div>
@@ -351,7 +341,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full sm:w-auto px-7 py-3 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(168,85,247,0.5)] transform active:scale-95"
             >
               <Check className="w-4 h-4" />
-              <span>{t('save_and_resume', settings.language)}</span>
+              <span>{t('save_and_resume')}</span>
             </button>
           </div>
         </motion.div>

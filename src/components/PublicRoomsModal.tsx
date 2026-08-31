@@ -12,19 +12,14 @@ import {
   Filter,
   Play,
   ArrowRight,
-  ShieldAlert,
-  SlidersHorizontal,
-  Check,
-  Gamepad2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PublicRoomSummary } from '../types';
 import { multiplayerService } from '../services/multiplayerService';
 import { soundEngine } from '../services/soundEngine';
-import { t, languages } from '../i18n/translations';
+import { t } from '../i18n/translations';
 
 interface PublicRoomsModalProps {
-  language?: string;
   isOpen: boolean;
   onClose: () => void;
   onSelectRoom: (room: PublicRoomSummary) => void;
@@ -32,7 +27,6 @@ interface PublicRoomsModalProps {
 }
 
 export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
-  language = 'fr',
   isOpen,
   onClose,
   onSelectRoom,
@@ -40,7 +34,6 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
 }) => {
   const [rooms, setRooms] = useState<PublicRoomSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
   const [selectedGameMode, setSelectedGameMode] = useState<string>('all');
 
   const fetchRooms = useCallback(async () => {
@@ -49,14 +42,13 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
       // 1. Try WebSocket request
       if (multiplayerService.isConnected()) {
         multiplayerService.requestPublicRooms(
-          selectedLanguage === 'all' ? undefined : selectedLanguage,
+          undefined,
           selectedGameMode === 'all' ? undefined : selectedGameMode
         );
       }
 
       // 2. Fetch via REST as immediate fallback / sync
       const params = new URLSearchParams();
-      if (selectedLanguage !== 'all') params.append('language', selectedLanguage);
       if (selectedGameMode !== 'all') params.append('gameMode', selectedGameMode);
 
       const res = await fetch(`/api/public-rooms?${params.toString()}`);
@@ -71,7 +63,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLanguage, selectedGameMode]);
+  }, [selectedGameMode]);
 
   // Handle WebSocket rooms broadcast
   useEffect(() => {
@@ -104,11 +96,6 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
     onSelectRoom(room);
   };
 
-  const getFlagEmoji = (langCode: string) => {
-    const found = languages.find((l) => l.code === langCode);
-    return found?.flag || '🌐';
-  };
-
   const getModeIcon = (mode: string) => {
     switch (mode) {
       case 'music_blind_test':
@@ -124,12 +111,12 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   const getModeName = (mode: string) => {
     switch (mode) {
       case 'music_blind_test':
-        return t('music_blind_test', language);
+        return t('music_blind_test');
       case 'visual_blind_test':
-        return t('visual_blind_test', language);
+        return t('visual_blind_test');
       case 'quiz':
       default:
-        return t('quiz', language);
+        return t('quiz');
     }
   };
 
@@ -139,26 +126,26 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {t('status_lobby', language)}
+            {t('status_lobby')}
           </span>
         );
       case 'playing':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
-            {t('status_playing', language)} {totalQ > 0 ? `(${currentQ + 1}/${totalQ})` : ''}
+            {t('status_playing')} {totalQ > 0 ? `(${currentQ + 1}/${totalQ})` : ''}
           </span>
         );
       case 'question_result':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black uppercase tracking-wider">
-            {t('status_question_result', language)}
+            {t('status_question_result')}
           </span>
         );
       case 'game_over':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[10px] font-black uppercase tracking-wider">
-            {t('status_game_over', language)}
+            {t('status_game_over')}
           </span>
         );
       default:
@@ -197,14 +184,14 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
-                    {t('public_rooms', language)}
+                    {t('public_rooms')}
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase">
                     {rooms.length} {rooms.length === 1 ? 'salon' : 'salons'}
                   </span>
                 </div>
                 <p className="text-xs text-white/60 line-clamp-1">
-                  {t('public_rooms_desc', language)}
+                  {t('public_rooms_desc')}
                 </p>
               </div>
             </div>
@@ -219,7 +206,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 className={`p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-all cursor-pointer ${
                   isLoading ? 'animate-spin text-purple-400' : ''
                 }`}
-                title={t('refresh_rooms', language)}
+                title={t('refresh_rooms')}
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
@@ -239,41 +226,18 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
 
           {/* Filter Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white/5 p-3 rounded-2xl border border-white/10 shrink-0">
-            {/* Country / Language Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white/60 flex items-center gap-1.5">
-                <Globe2 className="w-3.5 h-3.5 text-purple-400" />
-                {t('filter_by_country', language)}:
-              </span>
-              <select
-                value={selectedLanguage}
-                onChange={(e) => {
-                  soundEngine.playClick();
-                  setSelectedLanguage(e.target.value);
-                }}
-                className="bg-[#191033] border border-white/15 text-white text-xs font-bold rounded-xl px-3 py-1.5 outline-none cursor-pointer hover:border-purple-400 transition-colors"
-              >
-                <option value="all">{t('all_countries', language)}</option>
-                {languages.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.flag} {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Game Mode Filter */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white/60 flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-pink-400" />
-                {t('filter_by_mode', language)}:
+                {t('filter_by_mode')}:
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {[
-                  { id: 'all', label: t('all_modes', language) },
-                  { id: 'music_blind_test', label: t('music_blind_test', language), icon: <Music2 className="w-3 h-3 text-pink-400" /> },
-                  { id: 'visual_blind_test', label: t('visual_blind_test', language), icon: <Eye className="w-3 h-3 text-emerald-400" /> },
-                  { id: 'quiz', label: t('quiz', language), icon: <BrainCircuit className="w-3 h-3 text-purple-400" /> },
+                  { id: 'all', label: t('all_modes') },
+                  { id: 'music_blind_test', label: t('music_blind_test'), icon: <Music2 className="w-3 h-3 text-pink-400" /> },
+                  { id: 'visual_blind_test', label: t('visual_blind_test'), icon: <Eye className="w-3 h-3 text-emerald-400" /> },
+                  { id: 'quiz', label: t('quiz'), icon: <BrainCircuit className="w-3 h-3 text-purple-400" /> },
                 ].map((mode) => (
                   <button
                     key={mode.id}
@@ -301,17 +265,16 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
             {rooms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center gap-3 bg-white/5 rounded-3xl border border-white/10">
                 <Globe2 className="w-12 h-12 text-white/20" />
-                <p className="text-sm font-bold text-white/80">{t('no_public_rooms', language)}</p>
+                <p className="text-sm font-bold text-white/80">{t('no_public_rooms')}</p>
                 <button
                   type="button"
                   onClick={() => {
                     soundEngine.playClick();
-                    setSelectedLanguage('all');
                     setSelectedGameMode('all');
                   }}
                   className="px-4 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-xs font-bold cursor-pointer transition-all"
                 >
-                  {t('all_modes', language)} & {t('all_countries', language)}
+                  {t('all_modes')}
                 </button>
               </div>
             ) : (
@@ -335,13 +298,9 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                         {room.isBotRoom && (
                           <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
                             <Bot className="w-3 h-3 text-amber-400" />
-                            {t('bot_room_tag', language)}
+                            {t('bot_room_tag')}
                           </span>
                         )}
-
-                        <span className="text-sm shrink-0" title={room.language}>
-                          {getFlagEmoji(room.language)}
-                        </span>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
@@ -363,7 +322,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                         {/* Player Count */}
                         <span className="flex items-center gap-1 font-medium">
                           <Users className="w-3 h-3 text-white/50" />
-                          {room.playerCount}/{room.maxPlayers || 8} {t('players', language)}
+                          {room.playerCount}/{room.maxPlayers || 8} {t('players')}
                         </span>
                       </div>
                     </div>
@@ -379,7 +338,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                       className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-purple-900/30 cursor-pointer transition-all transform hover:scale-105 active:scale-95 shrink-0"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>{t('join_action', language)}</span>
+                      <span>{t('join_action')}</span>
                     </button>
                   </div>
                 </div>
@@ -391,7 +350,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
           <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="text-xs text-white/50 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>{t('step1_desc', language)}</span>
+              <span>{t('step1_desc')}</span>
             </div>
 
             <button
@@ -403,7 +362,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
               }}
               className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/15 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>{t('enter_code_btn', language)}</span>
+              <span>{t('enter_code_btn')}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
