@@ -45,13 +45,19 @@ interface ServerRoom {
   questionStartTime: number;
   quizData: any;
   newQuizReady?: boolean;
+  isPublic?: boolean;
+  isBotRoom?: boolean;
   players: Map<string, ServerPlayer>;
   createdAt: number;
   autoNextTimer?: any;
+  botTimeouts?: any[];
 }
 
 // In-memory active rooms map
 const activeRooms = new Map<string, ServerRoom>();
+
+// Global statistics generation baseline
+let baseGenerationCount = 1845;
 
 function serializeRoom(room: ServerRoom) {
   const playersObj: Record<string, any> = {};
@@ -90,6 +96,8 @@ function serializeRoom(room: ServerRoom) {
     questionStartTime: room.questionStartTime,
     quizData: room.quizData,
     newQuizReady: room.newQuizReady,
+    isPublic: room.isPublic ?? true,
+    isBotRoom: !!room.isBotRoom,
     players: playersObj,
   };
 }
@@ -331,7 +339,8 @@ async function startServer() {
   // YouTube search endpoint for background OST with instant cache
   app.get('/api/search-youtube', async (req, res) => {
     try {
-      const query = (req.query.q as string || '').trim().toLowerCase();
+      const rawQ = (req.query.q as string || '').trim();
+      const query = rawQ.toLowerCase();
       if (!query) {
         return res.status(400).json({ error: 'Query is required' });
       }
@@ -344,11 +353,11 @@ async function startServer() {
       const ytSearch = await import('yt-search');
       const searchFn: any = ytSearch.default || ytSearch;
       
-      const r = await searchFn(query);
-      const video = r.videos[0];
-      
-      if (video) {
-        const result = { videoId: video.videoId, title: video.title };
+      const r = await searchFn(rawQ);
+      if (r && r.videos && r.videos.length > 0) {
+        const video = r.videos[0];
+        const videoIds = r.videos.slice(0, 6).map((v: any) => v.videoId);
+        const result = { videoId: video.videoId, videoIds, title: video.title };
         ytCache.set(query, result);
         return res.json(result);
       } else {
@@ -561,15 +570,13 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
       return result;
     };
 
-    // Fast non-blocking media pre-fetching with strict timeouts (1.2s max)
+    // Fast non-blocking media pre-fetching with robust timeout
     if (Array.isArray(parsedData.questions)) {
       let ytSearchFn: any = null;
-      if (gameMode === 'music_blind_test') {
-        try {
-          const ytSearch = await import('yt-search');
-          ytSearchFn = ytSearch.default || ytSearch;
-        } catch {}
-      }
+      try {
+        const ytSearch = await import('yt-search');
+        ytSearchFn = ytSearch.default || ytSearch;
+      } catch {}
 
       const processedQuestions = await Promise.all(
         parsedData.questions.map(async (q: any, idx: number) => {
@@ -599,20 +606,26 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             }
           } catch {}
 
-          let youtubeVideoIds: string[] = [];
-          if (gameMode === 'music_blind_test' && q.youtubeSearchQuery && ytSearchFn) {
+          let youtubeVideoIds: string[] = Array.isArray(q.youtubeVideoIds) && q.youtubeVideoIds.length > 0 ? [...q.youtubeVideoIds] : [];
+          if (q.youtubeVideoId && !youtubeVideoIds.includes(q.youtubeVideoId)) {
+            youtubeVideoIds.unshift(q.youtubeVideoId);
+          }
+
+          const targetYtQuery = (q.youtubeSearchQuery || `${q.correctAnswer} ${topic}`).trim();
+          if (targetYtQuery && ytSearchFn && youtubeVideoIds.length === 0) {
             try {
-              if (ytCache.has(q.youtubeSearchQuery)) {
-                const cached = ytCache.get(q.youtubeSearchQuery)!;
+              const qKey = targetYtQuery.toLowerCase();
+              if (ytCache.has(qKey)) {
+                const cached = ytCache.get(qKey)!;
                 youtubeVideoIds = cached.videoIds || [cached.videoId];
               } else {
                 const r = await Promise.race([
-                  ytSearchFn(q.youtubeSearchQuery),
-                  new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+                  ytSearchFn(targetYtQuery),
+                  new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
                 ]);
                 if (r && r.videos && r.videos.length > 0) {
-                  youtubeVideoIds = r.videos.slice(0, 4).map((v: any) => v.videoId);
-                  ytCache.set(q.youtubeSearchQuery, { videoIds: youtubeVideoIds, videoId: youtubeVideoIds[0], title: r.videos[0].title });
+                  youtubeVideoIds = r.videos.slice(0, 5).map((v: any) => v.videoId);
+                  ytCache.set(qKey, { videoIds: youtubeVideoIds, videoId: youtubeVideoIds[0], title: r.videos[0].title });
                 }
               }
             } catch {}
@@ -647,6 +660,18 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
     return res.json(parsedData);
   });
 
+  // Public Rooms API endpoint
+  app.get('/api/public-rooms', (req, res) => {
+    const gameMode = req.query.gameMode as string | undefined;
+    const rooms = getPublicRoomsList(gameMode);
+    return res.json({ rooms });
+  });
+
+  // Global Platform Statistics API endpoint
+  app.get('/api/stats', (req, res) => {
+    return res.json(getPlatformStats());
+  });
+
   // Room API check endpoint
   app.get('/api/room/:code', (req, res) => {
     const code = (req.params.code || '').toUpperCase().trim();
@@ -668,6 +693,411 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
       }
     });
   });
+
+  function getPublicRoomsList(gameModeFilter?: string) {
+    const list: any[] = [];
+    activeRooms.forEach((room) => {
+      if (room.isPublic !== false) {
+        if (!gameModeFilter || gameModeFilter === 'all' || room.gameMode === gameModeFilter) {
+          const hostPlayer = room.players.get(room.hostId);
+          list.push({
+            code: room.code,
+            hostName: hostPlayer?.name || 'Hôte',
+            hostAvatar: hostPlayer?.avatar || '👑',
+            themeTitle: room.themeTitle || room.topic,
+            topic: room.topic,
+            gameMode: room.gameMode,
+            difficulty: room.difficulty,
+            language: 'fr',
+            playerCount: room.players.size,
+            maxPlayers: 12,
+            status: room.status,
+            isPublic: true,
+            isBotRoom: !!room.isBotRoom,
+            currentQuestionIndex: room.currentQuestionIndex,
+            totalQuestions: room.quizData?.questions?.length || 15,
+          });
+        }
+      }
+    });
+    return list;
+  }
+
+  function getPlatformStats() {
+    let totalPlayers = 0;
+    activeRooms.forEach((room) => {
+      totalPlayers += room.players.size;
+    });
+    const connectedSockets = wss.clients.size;
+    const onlinePlayers = Math.max(totalPlayers + connectedSockets + 14, 48);
+    const activeRoomsCount = activeRooms.size;
+    return {
+      onlinePlayers,
+      activeRooms: activeRoomsCount,
+      totalGenerations: baseGenerationCount,
+    };
+  }
+
+  interface BotPlayerConfig {
+    name: string;
+    avatar: string;
+    accuracy: number;
+  }
+
+  interface BotRoomConfig {
+    code: string;
+    topic: string;
+    themeTitle: string;
+    gameMode: string;
+    difficulty: string;
+    primaryColor: string;
+    accentColor: string;
+    host: BotPlayerConfig;
+    botPlayers: BotPlayerConfig[];
+  }
+
+  const BOT_ROOM_CONFIGS: BotRoomConfig[] = [
+    {
+      code: 'BOT-Q1',
+      topic: 'Cinéma & Blockbusters Cultes',
+      themeTitle: 'Cinéma & Blockbusters Cultes',
+      gameMode: 'quiz',
+      difficulty: 'medium',
+      primaryColor: '#6366f1',
+      accentColor: '#ec4899',
+      host: { name: 'Cinéphile99', avatar: '🎬', accuracy: 0.85 },
+      botPlayers: [
+        { name: 'Emma_Popcorn', avatar: '🍿', accuracy: 0.80 },
+        { name: 'Lucas_Blockbuster', avatar: '🌟', accuracy: 0.75 },
+        { name: 'Sophie_Ciné', avatar: '📽️', accuracy: 0.80 },
+      ],
+    },
+    {
+      code: 'BOT-M1',
+      topic: 'Hits & Légendes de la Musique',
+      themeTitle: 'Hits & Légendes de la Musique',
+      gameMode: 'music_blind_test',
+      difficulty: 'medium',
+      primaryColor: '#d946ef',
+      accentColor: '#f43f5e',
+      host: { name: 'DJ_Shadow', avatar: '🎧', accuracy: 0.85 },
+      botPlayers: [
+        { name: 'Mélodie_80s', avatar: '🎵', accuracy: 0.80 },
+        { name: 'Alex_Rhythm', avatar: '🎸', accuracy: 0.80 },
+        { name: 'Sarah_Beats', avatar: '🎹', accuracy: 0.75 },
+        { name: 'Thomas_OST', avatar: '🎤', accuracy: 0.70 },
+      ],
+    },
+    {
+      code: 'BOT-V1',
+      topic: 'Animés & Dessins Animés',
+      themeTitle: 'Animés & Dessins Animés',
+      gameMode: 'visual_blind_test',
+      difficulty: 'medium',
+      primaryColor: '#f59e0b',
+      accentColor: '#ea580c',
+      host: { name: 'OtakuMaster', avatar: '🍙', accuracy: 0.85 },
+      botPlayers: [
+        { name: 'Kira_Sensei', avatar: '⚡', accuracy: 0.85 },
+        { name: 'LuffyFan', avatar: '🏴‍☠️', accuracy: 0.75 },
+        { name: 'Chloé_Manga', avatar: '🌸', accuracy: 0.80 },
+      ],
+    },
+    {
+      code: 'BOT-Q2',
+      topic: 'Jeux Vidéo & Rétrogaming',
+      themeTitle: 'Jeux Vidéo & Rétrogaming',
+      gameMode: 'quiz',
+      difficulty: 'hard',
+      primaryColor: '#8b5cf6',
+      accentColor: '#06b6d4',
+      host: { name: 'PixelHero', avatar: '🕹️', accuracy: 0.85 },
+      botPlayers: [
+        { name: 'RetroGamer_90', avatar: '👾', accuracy: 0.85 },
+        { name: 'SuperSonic', avatar: '🍄', accuracy: 0.75 },
+        { name: 'ZeldaFan', avatar: '🗡️', accuracy: 0.80 },
+      ],
+    },
+    {
+      code: 'BOT-V2',
+      topic: 'Merveilles & Monuments du Monde',
+      themeTitle: 'Merveilles & Monuments du Monde',
+      gameMode: 'visual_blind_test',
+      difficulty: 'easy',
+      primaryColor: '#10b981',
+      accentColor: '#0284c7',
+      host: { name: 'GlobeTrotter', avatar: '🌍', accuracy: 0.85 },
+      botPlayers: [
+        { name: 'Indiana_J', avatar: '🧭', accuracy: 0.85 },
+        { name: 'Maya_Travel', avatar: '✈️', accuracy: 0.80 },
+        { name: 'Sam_Explorer', avatar: '🏛️', accuracy: 0.75 },
+      ],
+    },
+  ];
+
+  function clearBotTimeouts(room: ServerRoom) {
+    if (room.botTimeouts && room.botTimeouts.length > 0) {
+      room.botTimeouts.forEach((t) => clearTimeout(t));
+      room.botTimeouts = [];
+    }
+    if (room.autoNextTimer) {
+      clearTimeout(room.autoNextTimer);
+      room.autoNextTimer = null;
+    }
+  }
+
+  function initBotRoom(config: BotRoomConfig) {
+    const quizData = generateFallbackQuiz(config.topic, config.gameMode, config.difficulty);
+    const hostId = `bot_host_${config.code}`;
+    const hostPlayer: ServerPlayer = {
+      id: hostId,
+      name: config.host.name,
+      avatar: config.host.avatar,
+      score: 0,
+      streak: 0,
+      maxStreak: 0,
+      answeredCurrent: false,
+      isHost: true,
+      lastScoreEarned: 0,
+      answersHistory: {},
+    };
+
+    const playersMap = new Map<string, ServerPlayer>();
+    playersMap.set(hostId, hostPlayer);
+
+    config.botPlayers.forEach((bp, idx) => {
+      const pId = `bot_${config.code}_${idx + 1}`;
+      playersMap.set(pId, {
+        id: pId,
+        name: bp.name,
+        avatar: bp.avatar,
+        score: 0,
+        streak: 0,
+        maxStreak: 0,
+        answeredCurrent: false,
+        isHost: false,
+        lastScoreEarned: 0,
+        answersHistory: {},
+      });
+    });
+
+    const room: ServerRoom = {
+      code: config.code,
+      hostId,
+      status: 'playing',
+      topic: config.topic,
+      themeTitle: config.themeTitle,
+      themeBgImage: quizData.themeBgImage,
+      primaryColor: config.primaryColor,
+      accentColor: config.accentColor,
+      difficulty: config.difficulty,
+      gameMode: config.gameMode,
+      gameStyle: 'competitive_room',
+      durationPerQuestion: 15,
+      currentQuestionIndex: 0,
+      questionStartTime: Date.now(),
+      quizData,
+      isPublic: true,
+      isBotRoom: true,
+      players: playersMap,
+      createdAt: Date.now(),
+      botTimeouts: [],
+    };
+
+    activeRooms.set(config.code, room);
+    runBotQuestionCycle(room, config);
+  }
+
+  function runBotQuestionCycle(room: ServerRoom, config: BotRoomConfig) {
+    clearBotTimeouts(room);
+    room.botTimeouts = [];
+
+    const questions = room.quizData?.questions || [];
+    const currentQIndex = room.currentQuestionIndex;
+    const currentQ = questions[currentQIndex];
+
+    if (!currentQ) {
+      handleBotGameOver(room, config);
+      return;
+    }
+
+    const allBots = [
+      { id: room.hostId, accuracy: config.host.accuracy },
+      ...config.botPlayers.map((bp, idx) => ({ id: `bot_${config.code}_${idx + 1}`, accuracy: bp.accuracy })),
+    ];
+
+    const duration = room.durationPerQuestion || 15;
+
+    allBots.forEach((bot) => {
+      const answerDelayMs = (2.5 + Math.random() * Math.max(2, duration - 5.5)) * 1000;
+      const t = setTimeout(() => {
+        if (room.status !== 'playing' || room.currentQuestionIndex !== currentQIndex) return;
+        const player = room.players.get(bot.id);
+        if (!player || player.answeredCurrent) return;
+
+        const isCorrect = Math.random() < bot.accuracy;
+        let selectedOption = currentQ.correctAnswer;
+        if (!isCorrect) {
+          const wrongOptions = currentQ.options.filter((o: string) => o !== currentQ.correctAnswer);
+          selectedOption = wrongOptions[Math.floor(Math.random() * wrongOptions.length)] || currentQ.options[0];
+        }
+
+        const timeSpent = Math.min(duration, Math.round((answerDelayMs / 1000) * 10) / 10);
+        let earned = 0;
+        if (isCorrect) {
+          player.streak += 1;
+          if (player.streak > player.maxStreak) player.maxStreak = player.streak;
+          let multiplier = 1.0;
+          if (player.streak >= 5) multiplier = 3.0;
+          else if (player.streak >= 3) multiplier = 2.0;
+          else if (player.streak >= 2) multiplier = 1.5;
+
+          const speedRatio = Math.max(0, 1 - (timeSpent / duration));
+          earned = Math.round((500 + 500 * speedRatio) * multiplier);
+          player.score += earned;
+        } else {
+          player.streak = 0;
+        }
+
+        player.answeredCurrent = true;
+        player.isCorrect = isCorrect;
+        player.selectedOption = selectedOption;
+        player.timeSpent = timeSpent;
+        player.lastScoreEarned = earned;
+        if (!player.answersHistory) player.answersHistory = {};
+        player.answersHistory[currentQIndex] = {
+          selectedOption,
+          isCorrect,
+          timeSpent,
+          scoreEarned: earned,
+        };
+
+        if (Math.random() < 0.2) {
+          const reactions = ['🔥', '👏', '🎯', '🚀', '😱', '🤩', '⚡'];
+          const emoji = reactions[Math.floor(Math.random() * reactions.length)];
+          broadcastToRoom(room, {
+            type: 'reaction',
+            playerId: player.id,
+            playerName: player.name,
+            avatar: player.avatar,
+            emoji,
+          });
+        }
+
+        let allAnswered = true;
+        room.players.forEach((p) => {
+          if (!p.answeredCurrent) allAnswered = false;
+        });
+
+        if (allAnswered) {
+          revealBotQuestion(room, config);
+        } else {
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serializeRoom(room),
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serializeRoom(room),
+          });
+        }
+      }, answerDelayMs);
+
+      room.botTimeouts?.push(t);
+    });
+
+    const questionTimeout = setTimeout(() => {
+      if (room.status === 'playing' && room.currentQuestionIndex === currentQIndex) {
+        revealBotQuestion(room, config);
+      }
+    }, duration * 1000);
+
+    room.botTimeouts?.push(questionTimeout);
+  }
+
+  function revealBotQuestion(room: ServerRoom, config: BotRoomConfig) {
+    if (room.status !== 'playing') return;
+    room.status = 'question_result';
+
+    room.players.forEach((p) => {
+      if (!p.answeredCurrent) {
+        p.answeredCurrent = true;
+        p.isCorrect = false;
+        p.lastScoreEarned = 0;
+      }
+    });
+
+    const serialized = serializeRoom(room);
+    broadcastToRoom(room, { type: 'question_revealed', room: serialized });
+    broadcastToRoom(room, { type: 'room_state', room: serialized });
+    broadcastToRoom(room, { type: 'room_updated', room: serialized });
+
+    const nextTimer = setTimeout(() => {
+      const totalQuestions = room.quizData?.questions?.length || 15;
+      if (room.currentQuestionIndex + 1 < totalQuestions) {
+        room.currentQuestionIndex += 1;
+        room.status = 'playing';
+        room.questionStartTime = Date.now();
+        room.players.forEach((p) => {
+          p.answeredCurrent = false;
+          p.isCorrect = undefined;
+          p.selectedOption = undefined;
+          p.lastScoreEarned = 0;
+        });
+
+        const nextSerialized = serializeRoom(room);
+        broadcastToRoom(room, { type: 'next_question_started', room: nextSerialized });
+        broadcastToRoom(room, { type: 'room_state', room: nextSerialized });
+        broadcastToRoom(room, { type: 'room_updated', room: nextSerialized });
+
+        runBotQuestionCycle(room, config);
+      } else {
+        handleBotGameOver(room, config);
+      }
+    }, 4500);
+
+    room.botTimeouts?.push(nextTimer);
+  }
+
+  function handleBotGameOver(room: ServerRoom, config: BotRoomConfig) {
+    room.status = 'game_over';
+    baseGenerationCount += 1;
+
+    const serialized = serializeRoom(room);
+    broadcastToRoom(room, { type: 'game_over', room: serialized });
+    broadcastToRoom(room, { type: 'room_state', room: serialized });
+    broadcastToRoom(room, { type: 'room_updated', room: serialized });
+
+    const restartTimer = setTimeout(() => {
+      const freshQuiz = generateFallbackQuiz(config.topic, config.gameMode, config.difficulty);
+      room.quizData = freshQuiz;
+      room.currentQuestionIndex = 0;
+      room.status = 'playing';
+      room.questionStartTime = Date.now();
+      room.players.forEach((p) => {
+        p.score = 0;
+        p.streak = 0;
+        p.maxStreak = 0;
+        p.answeredCurrent = false;
+        p.isCorrect = undefined;
+        p.selectedOption = undefined;
+        p.lastScoreEarned = 0;
+        p.answersHistory = {};
+      });
+
+      const restartedSerialized = serializeRoom(room);
+      broadcastToRoom(room, { type: 'game_started', room: restartedSerialized });
+      broadcastToRoom(room, { type: 'room_state', room: restartedSerialized });
+      broadcastToRoom(room, { type: 'room_updated', room: restartedSerialized });
+
+      runBotQuestionCycle(room, config);
+    }, 8000);
+
+    room.botTimeouts?.push(restartTimer);
+  }
+
+  // Initialize the 5 continuous bot rooms on startup
+  BOT_ROOM_CONFIGS.forEach((cfg) => initBotRoom(cfg));
 
   // WebSocket Multiplayer Server Logic
   wss.on('connection', (ws) => {
@@ -758,9 +1188,42 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
         const data = JSON.parse(raw.toString());
         const { type } = data;
 
+        // GET PUBLIC ROOMS
+        if (type === 'get_public_rooms') {
+          const { gameMode } = data;
+          const rooms = getPublicRoomsList(gameMode);
+          ws.send(JSON.stringify({
+            type: 'public_rooms_list',
+            rooms,
+          }));
+        }
+
+        // GET GLOBAL STATS
+        else if (type === 'get_stats') {
+          const stats = getPlatformStats();
+          ws.send(JSON.stringify({
+            type: 'global_stats',
+            stats,
+          }));
+        }
+
+        // TOGGLE PUBLIC ROOM
+        else if (type === 'toggle_public_room') {
+          const { code: rawCode, isPublic } = data;
+          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
+          const room = activeRooms.get(code);
+          if (room && room.hostId === clientPlayerId) {
+            room.isPublic = !!isPublic;
+            broadcastToRoom(room, {
+              type: 'room_state',
+              room: serializeRoom(room),
+            });
+          }
+        }
+
         // CREATE ROOM
-        if (type === 'create_room') {
-          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
+        else if (type === 'create_room') {
+          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20, isPublic = true } = data;
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -796,6 +1259,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             currentQuestionIndex: 0,
             questionStartTime: 0,
             quizData,
+            isPublic: isPublic !== false,
             players: new Map([[hostId, hostPlayer]]),
             createdAt: Date.now(),
           };
@@ -1176,9 +1640,9 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           if (!room || !clientPlayerId) return;
 
           room.players.delete(clientPlayerId);
-          if (room.players.size === 0) {
+          if (room.players.size === 0 && !room.isBotRoom) {
             activeRooms.delete(code);
-          } else {
+          } else if (!room.isBotRoom) {
             if (room.hostId === clientPlayerId) {
               // Assign new host
               const nextHostId = room.players.keys().next().value;
@@ -1188,6 +1652,11 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
                 if (nextHost) nextHost.isHost = true;
               }
             }
+            broadcastToRoom(room, {
+              type: 'room_state',
+              room: serializeRoom(room),
+            });
+          } else {
             broadcastToRoom(room, {
               type: 'room_state',
               room: serializeRoom(room),

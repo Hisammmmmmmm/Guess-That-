@@ -845,6 +845,94 @@ export default function App() {
   const currentQuestion: Question | undefined = quizData?.questions[currentQuestionIndex];
   const activeVideoId = currentQuestion?.youtubeVideoIds?.[currentYtIndex] || currentQuestion?.youtubeVideoId;
 
+  // Reset YouTube fallback index on question change and fetch missing video if needed
+  useEffect(() => {
+    setCurrentYtIndex(0);
+    if (currentQuestion && !currentQuestion.youtubeVideoId && (currentQuestion.youtubeSearchQuery || currentQuestion.correctAnswer)) {
+      const qKey = (currentQuestion.youtubeSearchQuery || `${currentQuestion.correctAnswer} ${quizData?.topic || ''}`).trim();
+      if (qKey) {
+        const cached = ytCacheRef.current[qKey.toLowerCase()];
+        if (cached) {
+          setQuizData((prev) => {
+            if (!prev) return prev;
+            const updated = [...prev.questions];
+            if (updated[currentQuestionIndex]) {
+              updated[currentQuestionIndex] = { ...updated[currentQuestionIndex], youtubeVideoId: cached, youtubeVideoIds: [cached] };
+            }
+            return { ...prev, questions: updated };
+          });
+        } else {
+          fetch(`/api/search-youtube?q=${encodeURIComponent(qKey)}`)
+            .then((res) => (res.ok ? res.json().catch(() => null) : null))
+            .then((data) => {
+              if (data?.videoId) {
+                ytCacheRef.current[qKey.toLowerCase()] = data.videoId;
+                setQuizData((prev) => {
+                  if (!prev) return prev;
+                  const updated = [...prev.questions];
+                  if (updated[currentQuestionIndex]) {
+                    const vIds = data.videoIds && data.videoIds.length > 0 ? data.videoIds : [data.videoId];
+                    updated[currentQuestionIndex] = { ...updated[currentQuestionIndex], youtubeVideoId: data.videoId, youtubeVideoIds: vIds };
+                  }
+                  return { ...prev, questions: updated };
+                });
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }, [currentQuestionIndex, currentQuestion?.id]);
+
+  // Aggressive background prefetch of all 15 questions' YouTube videos and images
+  useEffect(() => {
+    if (!quizData?.questions || quizData.questions.length === 0) return;
+    
+    quizData.questions.forEach((q, idx) => {
+      if (q.imageUrl) {
+        const img = new Image();
+        img.src = q.imageUrl;
+      }
+      if (q.secondaryImageUrl) {
+        const img = new Image();
+        img.src = q.secondaryImageUrl;
+      }
+
+      const searchKey = (q.youtubeSearchQuery || `${q.correctAnswer} ${quizData.topic}`).trim();
+      if (!q.youtubeVideoId && searchKey) {
+        const cached = ytCacheRef.current[searchKey.toLowerCase()];
+        if (cached) {
+          setQuizData((prev) => {
+            if (!prev || prev.questions[idx]?.youtubeVideoId) return prev;
+            const updated = [...prev.questions];
+            if (updated[idx]) {
+              updated[idx] = { ...updated[idx], youtubeVideoId: cached, youtubeVideoIds: [cached] };
+            }
+            return { ...prev, questions: updated };
+          });
+        } else {
+          fetch(`/api/search-youtube?q=${encodeURIComponent(searchKey)}`)
+            .then((res) => (res.ok ? res.json().catch(() => null) : null))
+            .then((resData) => {
+              if (resData?.videoId) {
+                ytCacheRef.current[searchKey.toLowerCase()] = resData.videoId;
+                setQuizData((prev) => {
+                  if (!prev) return prev;
+                  const updated = [...prev.questions];
+                  if (updated[idx]) {
+                    const vIds = resData.videoIds && resData.videoIds.length > 0 ? resData.videoIds : [resData.videoId];
+                    updated[idx] = { ...updated[idx], youtubeVideoId: resData.videoId, youtubeVideoIds: vIds };
+                  }
+                  return { ...prev, questions: updated };
+                });
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    });
+  }, [quizData?.themeTitle, quizData?.topic]);
+
   // Stop Timer
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -1761,6 +1849,7 @@ export default function App() {
                           {activeVideoId && (
                             <div className={`absolute inset-0 w-full h-full z-20 transition-opacity duration-700 ${isAnswered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                               <YouTube
+                                key={`yt_player_${currentQuestionIndex}_${activeVideoId}`}
                                 videoId={activeVideoId}
                                 opts={{
                                   width: '100%',
@@ -1797,7 +1886,7 @@ export default function App() {
                                 }}
                                 onError={(e) => {
                                   console.error("Youtube Player Error Center:", e);
-                                  if (currentQuestion.youtubeVideoIds && currentYtIndex < currentQuestion.youtubeVideoIds.length - 1) {
+                                  if (currentQuestion && currentQuestion.youtubeVideoIds && currentYtIndex < currentQuestion.youtubeVideoIds.length - 1) {
                                     setCurrentYtIndex(prev => prev + 1);
                                   }
                                 }}
