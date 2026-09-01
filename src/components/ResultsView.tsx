@@ -16,7 +16,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GameStats, QuizData } from '../types';
+import { GameStats, QuizData, GameStyle } from '../types';
 import { soundEngine } from '../services/soundEngine';
 
 import { t } from '../i18n/translations';
@@ -28,7 +28,7 @@ interface ResultsViewProps {
   onReplay: () => void;
   onNewTheme: () => void;
   onPlayClickSound?: () => void;
-  gameStyle?: 'competitive' | 'slideshow';
+  gameStyle?: GameStyle;
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({

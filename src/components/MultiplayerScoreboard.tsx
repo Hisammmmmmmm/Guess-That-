@@ -103,7 +103,9 @@ export const MultiplayerScoreboard: React.FC<MultiplayerScoreboardProps> = ({
                         {player.name}
                       </span>
                       {player.isHost && (
-                        <Crown className="w-3 h-3 text-amber-400 shrink-0" title={t('host', language)} />
+                        <span title={t('host', language)} className="flex items-center">
+                          <Crown className="w-3 h-3 text-amber-400 shrink-0" />
+                        </span>
                       )}
                     </div>
 

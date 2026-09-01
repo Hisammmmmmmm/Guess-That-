@@ -20,6 +20,7 @@ import { soundEngine } from '../services/soundEngine';
 import { t } from '../i18n/translations';
 
 interface PublicRoomsModalProps {
+  language?: string;
   isOpen: boolean;
   onClose: () => void;
   onSelectRoom: (room: PublicRoomSummary) => void;
@@ -27,6 +28,7 @@ interface PublicRoomsModalProps {
 }
 
 export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
+  language = 'fr',
   isOpen,
   onClose,
   onSelectRoom,

@@ -44,8 +44,10 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
 
   const toggleAudio = () => {
     if (isPlaying || isMusicMode) {
-      if (playerRef.current) {
-        playerRef.current.pauseVideo();
+      if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+        try {
+          playerRef.current.pauseVideo();
+        } catch {}
       }
       setIsPlaying(false);
       return;
@@ -54,8 +56,10 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
     setIsPlaying(true);
     
     if (youtubeVideoId) {
-      if (playerRef.current) {
-        playerRef.current.playVideo();
+      if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+        try {
+          playerRef.current.playVideo();
+        } catch {}
       }
     } else {
       // Fallback to synthetic melody
@@ -77,12 +81,22 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
   // Stop playing when moving to next question
   useEffect(() => {
     setIsPlaying(false);
-    ttsService.stop();
-    if (playerRef.current) {
-      playerRef.current.pauseVideo();
+    try {
+      ttsService.stop();
+    } catch {}
+
+    if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+      try {
+        playerRef.current.pauseVideo();
+      } catch {
+        // Ignore unmounted YouTube iframe errors
+      }
     }
     return () => {
-      ttsService.stop();
+      try {
+        ttsService.stop();
+      } catch {}
+      playerRef.current = null;
     };
   }, [youtubeVideoId, clueText]);
 
@@ -98,12 +112,15 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
 
   const onReady = (event: any) => {
     playerRef.current = event.target;
-    // Set volume to question audio volume (defaults to 80%)
-    event.target.setVolume(Math.min(100, Math.max(0, volume)));
-    if (isMusicMode) {
-      event.target.playVideo();
-      setIsPlaying(true);
-    }
+    try {
+      if (typeof event.target.setVolume === 'function') {
+        event.target.setVolume(Math.min(100, Math.max(0, volume)));
+      }
+      if (isMusicMode && typeof event.target.playVideo === 'function') {
+        event.target.playVideo();
+        setIsPlaying(true);
+      }
+    } catch {}
   };
 
   const onEnd = () => {
@@ -189,6 +206,7 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
                  fs: 0,
                  start: 0,
                  vq: 'small', // Low resource for audio-only
+                 enablejsapi: 1,
                },
              }}
              onReady={(e) => {
@@ -199,10 +217,12 @@ export const AudioCluePlayer: React.FC<AudioCluePlayerProps> = ({
                } catch (err) {
                  // ignore
                }
-               onReady(e);
+               try {
+                 onReady(e);
+               } catch {}
              }}
              onEnd={onEnd}
-             onError={(e) => console.error("Youtube Player Error:", e)}
+             onError={(e) => console.warn("YouTube Player Clue Error:", e?.data)}
            />
          </div>
       )}

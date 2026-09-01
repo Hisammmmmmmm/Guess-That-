@@ -251,7 +251,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/15 via-transparent to-pink-500/10 pointer-events-none" />
                         )}
                         <div className={`p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl border text-white shadow-md transition-transform duration-200 group-hover:scale-105 shrink-0 ${isSelected ? `bg-gradient-to-br ${m.color} border-white/30` : 'bg-white/10 border-white/15'}`}>
-                          {React.cloneElement(m.icon as React.ReactElement, { className: 'w-4 h-4 sm:w-6 sm:h-6' })}
+                          {React.cloneElement(m.icon as React.ReactElement<any>, { className: 'w-4 h-4 sm:w-6 sm:h-6' })}
                         </div>
                         <div className="relative z-10 flex flex-col gap-0.5 flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
@@ -299,7 +299,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                         className="flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-1.5 shadow-lg shadow-purple-900/40 cursor-pointer transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
                       >
                         <Globe2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="sm:hidden">Salons publics</span>
+                        <span className="sm:hidden">Salon publique</span>
                         <span className="hidden sm:inline truncate">{t('browse_public_rooms', language)}</span>
                       </button>
                     )}
@@ -455,7 +455,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                       className="flex-1 px-2.5 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-[11px] sm:text-sm font-bold text-white flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer backdrop-blur-md hover:border-purple-400 shadow-md whitespace-nowrap"
                     >
                       <Globe2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-pink-400 shrink-0" />
-                      <span className="sm:hidden">Salons publics</span>
+                      <span className="sm:hidden">Salon publique</span>
                       <span className="hidden sm:inline truncate">{t('browse_public_rooms', language)}</span>
                     </button>
                   )}
@@ -600,7 +600,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                               color: theme.primaryColor,
                             }}
                           >
-                            {ICON_MAP[theme.icon] ? React.cloneElement(ICON_MAP[theme.icon] as React.ReactElement, { className: 'w-3 h-3 sm:w-3.5 sm:h-3.5' }) : <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
+                            {ICON_MAP[theme.icon] ? React.cloneElement(ICON_MAP[theme.icon] as React.ReactElement<any>, { className: 'w-3 h-3 sm:w-3.5 sm:h-3.5' }) : <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="text-[10px] sm:text-[11px] font-bold text-white group-hover:text-purple-200 transition-colors truncate">

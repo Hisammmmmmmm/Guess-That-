@@ -37,6 +37,7 @@ import { ThemeSelector } from './components/ThemeSelector';
 import { CircularCountdown } from './components/CircularCountdown';
 import { VisualClue } from './components/VisualClue';
 import { AudioCluePlayer } from './components/AudioCluePlayer';
+import { BlindTestMusicPlayer } from './components/BlindTestMusicPlayer';
 import { QuestionCard } from './components/QuestionCard';
 import { ScoreBoard } from './components/ScoreBoard';
 import { SettingsModal } from './components/SettingsModal';
@@ -46,6 +47,7 @@ import { JoinRoomModal } from './components/JoinRoomModal';
 import { PublicRoomsModal } from './components/PublicRoomsModal';
 import { MultiplayerScoreboard } from './components/MultiplayerScoreboard';
 import { MultiplayerResultsView } from './components/MultiplayerResultsView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Fisher-Yates array shuffler
 function shuffleArray<T>(array: T[]): T[] {
@@ -148,6 +150,7 @@ export default function App() {
 
   const bgYtPlayerRef = useRef<any>(null);
   const mainYtPlayerRef = useRef<any>(null);
+  const bgFadeIntervalRef = useRef<any>(null);
 
   // --- MULTIPLAYER ROOM STATE ---
   const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -588,7 +591,7 @@ export default function App() {
       }
       if (newSettings.musicEnabled !== undefined) {
         soundEngine.setMusicMuted(!newSettings.musicEnabled);
-        if (newSettings.musicEnabled && (screen === 'menu' || screen === 'results' || screen === 'multiplayer_results' || screen === 'lobby' || screen === 'room_lobby')) {
+        if (newSettings.musicEnabled && (screen === 'menu' || screen === 'results' || screen === 'room_results' || screen === 'room_lobby')) {
           soundEngine.startMenuMusic();
         }
       }
@@ -845,94 +848,6 @@ export default function App() {
   const currentQuestion: Question | undefined = quizData?.questions[currentQuestionIndex];
   const activeVideoId = currentQuestion?.youtubeVideoIds?.[currentYtIndex] || currentQuestion?.youtubeVideoId;
 
-  // Reset YouTube fallback index on question change and fetch missing video if needed
-  useEffect(() => {
-    setCurrentYtIndex(0);
-    if (currentQuestion && !currentQuestion.youtubeVideoId && (currentQuestion.youtubeSearchQuery || currentQuestion.correctAnswer)) {
-      const qKey = (currentQuestion.youtubeSearchQuery || `${currentQuestion.correctAnswer} ${quizData?.topic || ''}`).trim();
-      if (qKey) {
-        const cached = ytCacheRef.current[qKey.toLowerCase()];
-        if (cached) {
-          setQuizData((prev) => {
-            if (!prev) return prev;
-            const updated = [...prev.questions];
-            if (updated[currentQuestionIndex]) {
-              updated[currentQuestionIndex] = { ...updated[currentQuestionIndex], youtubeVideoId: cached, youtubeVideoIds: [cached] };
-            }
-            return { ...prev, questions: updated };
-          });
-        } else {
-          fetch(`/api/search-youtube?q=${encodeURIComponent(qKey)}`)
-            .then((res) => (res.ok ? res.json().catch(() => null) : null))
-            .then((data) => {
-              if (data?.videoId) {
-                ytCacheRef.current[qKey.toLowerCase()] = data.videoId;
-                setQuizData((prev) => {
-                  if (!prev) return prev;
-                  const updated = [...prev.questions];
-                  if (updated[currentQuestionIndex]) {
-                    const vIds = data.videoIds && data.videoIds.length > 0 ? data.videoIds : [data.videoId];
-                    updated[currentQuestionIndex] = { ...updated[currentQuestionIndex], youtubeVideoId: data.videoId, youtubeVideoIds: vIds };
-                  }
-                  return { ...prev, questions: updated };
-                });
-              }
-            })
-            .catch(() => {});
-        }
-      }
-    }
-  }, [currentQuestionIndex, currentQuestion?.id]);
-
-  // Aggressive background prefetch of all 15 questions' YouTube videos and images
-  useEffect(() => {
-    if (!quizData?.questions || quizData.questions.length === 0) return;
-    
-    quizData.questions.forEach((q, idx) => {
-      if (q.imageUrl) {
-        const img = new Image();
-        img.src = q.imageUrl;
-      }
-      if (q.secondaryImageUrl) {
-        const img = new Image();
-        img.src = q.secondaryImageUrl;
-      }
-
-      const searchKey = (q.youtubeSearchQuery || `${q.correctAnswer} ${quizData.topic}`).trim();
-      if (!q.youtubeVideoId && searchKey) {
-        const cached = ytCacheRef.current[searchKey.toLowerCase()];
-        if (cached) {
-          setQuizData((prev) => {
-            if (!prev || prev.questions[idx]?.youtubeVideoId) return prev;
-            const updated = [...prev.questions];
-            if (updated[idx]) {
-              updated[idx] = { ...updated[idx], youtubeVideoId: cached, youtubeVideoIds: [cached] };
-            }
-            return { ...prev, questions: updated };
-          });
-        } else {
-          fetch(`/api/search-youtube?q=${encodeURIComponent(searchKey)}`)
-            .then((res) => (res.ok ? res.json().catch(() => null) : null))
-            .then((resData) => {
-              if (resData?.videoId) {
-                ytCacheRef.current[searchKey.toLowerCase()] = resData.videoId;
-                setQuizData((prev) => {
-                  if (!prev) return prev;
-                  const updated = [...prev.questions];
-                  if (updated[idx]) {
-                    const vIds = resData.videoIds && resData.videoIds.length > 0 ? resData.videoIds : [resData.videoId];
-                    updated[idx] = { ...updated[idx], youtubeVideoId: resData.videoId, youtubeVideoIds: vIds };
-                  }
-                  return { ...prev, questions: updated };
-                });
-              }
-            })
-            .catch(() => {});
-        }
-      }
-    });
-  }, [quizData?.themeTitle, quizData?.topic]);
-
   // Stop Timer
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -1115,7 +1030,7 @@ export default function App() {
       return;
     }
 
-    if (screen === 'menu' || screen === 'results' || screen === 'multiplayer_results' || screen === 'lobby' || screen === 'room_lobby') {
+    if (screen === 'menu' || screen === 'results' || screen === 'room_results' || screen === 'room_lobby') {
       soundEngine.startMenuMusic().then((isCustom) => {
         if (isCustom) {
           setYtVideoId(null);
@@ -1409,13 +1324,25 @@ export default function App() {
           setIsPaused(p => {
             const nextPaused = !p;
             if (nextPaused) {
-              if (ttsAudioRef.current) ttsAudioRef.current.pause();
-              if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.pauseVideo === 'function') bgYtPlayerRef.current.pauseVideo();
-              if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.pauseVideo === 'function') mainYtPlayerRef.current.pauseVideo();
+              if (ttsAudioRef.current) {
+                try { ttsAudioRef.current.pause(); } catch {}
+              }
+              if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.pauseVideo === 'function') {
+                try { bgYtPlayerRef.current.pauseVideo(); } catch {}
+              }
+              if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.pauseVideo === 'function') {
+                try { mainYtPlayerRef.current.pauseVideo(); } catch {}
+              }
             } else {
-              if (ttsAudioRef.current && !isAnswered) ttsAudioRef.current.play().catch(()=>{});
-              if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.playVideo === 'function') bgYtPlayerRef.current.playVideo();
-              if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.playVideo === 'function') mainYtPlayerRef.current.playVideo();
+              if (ttsAudioRef.current && !isAnswered) {
+                try { ttsAudioRef.current.play().catch(()=>{}); } catch {}
+              }
+              if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.playVideo === 'function') {
+                try { bgYtPlayerRef.current.playVideo(); } catch {}
+              }
+              if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.playVideo === 'function') {
+                try { mainYtPlayerRef.current.playVideo(); } catch {}
+              }
             }
             return nextPaused;
           });
@@ -1441,10 +1368,15 @@ export default function App() {
                 loop: 1,
                 playlist: ytVideoId, // Required for looping
                 vq: 'small', // Minimal resources for background audio
+                enablejsapi: 1,
               },
             }}
             onReady={(e) => {
               bgYtPlayerRef.current = e.target;
+              if (bgFadeIntervalRef.current) {
+                clearInterval(bgFadeIntervalRef.current);
+                bgFadeIntervalRef.current = null;
+              }
               try {
                 if (e.target && typeof e.target.setPlaybackQuality === 'function') {
                   e.target.setPlaybackQuality('small');
@@ -1465,29 +1397,51 @@ export default function App() {
               // Start immediately at 35% of target volume so audio is heard right away without delay
               let currentVol = Math.max(1, targetVol * 0.35);
               if (e.target && typeof e.target.setVolume === 'function') {
-                e.target.setVolume(currentVol);
-                if (typeof e.target.playVideo === 'function') {
-                  e.target.playVideo();
-                }
+                try {
+                  e.target.setVolume(currentVol);
+                  if (typeof e.target.playVideo === 'function') {
+                    e.target.playVideo();
+                  }
+                } catch {}
               }
 
               // Smoothly fade to target volume in ~500ms
-              const fadeInterval = setInterval(() => {
+              bgFadeIntervalRef.current = setInterval(() => {
                 currentVol += (targetVol - currentVol) * 0.35 + 2;
                 if (currentVol >= targetVol) {
                   currentVol = targetVol;
-                  clearInterval(fadeInterval);
+                  if (bgFadeIntervalRef.current) {
+                    clearInterval(bgFadeIntervalRef.current);
+                    bgFadeIntervalRef.current = null;
+                  }
                 }
                 if (e.target && typeof e.target.setVolume === 'function') {
-                  e.target.setVolume(Math.min(100, currentVol));
+                  try {
+                    e.target.setVolume(Math.min(100, currentVol));
+                  } catch {
+                    if (bgFadeIntervalRef.current) {
+                      clearInterval(bgFadeIntervalRef.current);
+                      bgFadeIntervalRef.current = null;
+                    }
+                  }
                 } else {
-                  clearInterval(fadeInterval);
+                  if (bgFadeIntervalRef.current) {
+                    clearInterval(bgFadeIntervalRef.current);
+                    bgFadeIntervalRef.current = null;
+                  }
                 }
               }, 70);
             }}
             onPlay={() => {
               // Fade out synthetic ambience once YouTube starts playing
               soundEngine.stopAmbience();
+            }}
+            onError={(err) => {
+              console.warn('Background YouTube player error:', err);
+              if (bgFadeIntervalRef.current) {
+                clearInterval(bgFadeIntervalRef.current);
+                bgFadeIntervalRef.current = null;
+              }
             }}
           />
         </div>
@@ -1811,107 +1765,55 @@ export default function App() {
                       {/* Cadre Indice Audio (si mode non blind test musical) */}
                       {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-md flex items-center justify-center shrink-0">
-                          <AudioCluePlayer
-                            audioNotes={currentQuestion.audioNotes}
-                            clueText={currentQuestion.clue}
-                            speechEnabled={settings.speechCluesEnabled}
-                            primaryColor={quizData.primaryColor}
-                            youtubeVideoId={activeVideoId}
-                            gameMode={roomState?.gameMode || settings.gameMode}
-                            language={roomState?.language || settings.language}
-                            volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
-                          />
+                          <ErrorBoundary fallbackTitle="Indice audio" fallbackMessage="Lecteur audio en veille">
+                            <AudioCluePlayer
+                              audioNotes={currentQuestion.audioNotes}
+                              clueText={currentQuestion.clue}
+                              speechEnabled={settings.speechCluesEnabled}
+                              primaryColor={quizData.primaryColor}
+                              youtubeVideoId={activeVideoId}
+                              gameMode={roomState?.gameMode || settings.gameMode}
+                              language={roomState?.language || settings.language}
+                              volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
+                            />
+                          </ErrorBoundary>
                         </div>
                       )}
                     </div>
 
                     {/* Colonne Centrale (Mobile & Desktop): Cadre Média UNIQUE */}
                     <div className="w-full md:col-span-6 h-[105px] xs:h-[125px] sm:h-[165px] md:h-[200px] rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-inner relative shrink-0">
-                      {(roomState?.gameMode || settings.gameMode) === 'music_blind_test' ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden">
-                          {/* Visualiseur musical animé avant réponse */}
-                          <div className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-700 ${isAnswered ? 'opacity-0 pointer-events-none' : 'opacity-100 z-10'}`}>
-                            <div className="absolute inset-0 bg-gradient-to-br from-purple-900/15 via-white/5 to-transparent" />
-                            <div className="relative flex flex-col items-center justify-center gap-2 z-10">
-                              <div className="relative">
-                                <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-xl animate-pulse" />
-                                <div className="w-16 h-16 sm:w-22 sm:h-22 bg-black/60 border border-white/20 rounded-full flex items-center justify-center shadow-lg relative z-10">
-                                  <Music className="w-7 h-7 sm:w-10 sm:h-10 text-white/80 animate-pulse" />
-                                </div>
-                                <div className="absolute inset-0 rounded-full border border-white/30 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]" />
-                                <div className="absolute inset-0 rounded-full border border-white/10 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite_1s]" />
-                              </div>
-                              <span className="text-[9px] sm:text-[10px] font-bold text-white/60 uppercase tracking-widest">{t('listen_clue', roomState?.language || settings.language)}</span>
-                            </div>
-                          </div>
-
-                          {/* Lecteur Vidéo YouTube optimisé 480p (Instance unique) */}
-                          {activeVideoId && (
-                            <div className={`absolute inset-0 w-full h-full z-20 transition-opacity duration-700 ${isAnswered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                              <YouTube
-                                key={`yt_player_${currentQuestionIndex}_${activeVideoId}`}
-                                videoId={activeVideoId}
-                                opts={{
-                                  width: '100%',
-                                  height: '100%',
-                                  playerVars: {
-                                    autoplay: 1,
-                                    controls: 0,
-                                    disablekb: 1,
-                                    fs: 0,
-                                    start: 3,
-                                    vq: 'large', // 480p playback quality
-                                  },
-                                }}
-                                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:rounded-xl sm:[&>iframe]:rounded-2xl"
-                                onReady={(e) => {
-                                  mainYtPlayerRef.current = e.target;
-                                  try {
-                                    if (e.target && typeof e.target.setPlaybackQuality === 'function') {
-                                      e.target.setPlaybackQuality('large'); // 480p
-                                    }
-                                  } catch (err) {
-                                    // ignore
-                                  }
-                                  const baseQVol = settings.questionMusicVolume ?? 0.8;
-                                  const modeMultiplier = settings.gameMode === 'music_blind_test' ? 1.2 : 1.0;
-                                  const qVol = Math.min(1.0, baseQVol * modeMultiplier);
-                                  const finalVol = Math.min(100, Math.max(0, Math.round(qVol * (settings.masterVolume ?? 1.0) * 100)));
-                                  e.target.setVolume(finalVol);
-                                  e.target.playVideo();
-                                }}
-                                onEnd={(e) => {
-                                  e.target.seekTo(3);
-                                  e.target.playVideo();
-                                }}
-                                onError={(e) => {
-                                  console.error("Youtube Player Error Center:", e);
-                                  if (currentQuestion && currentQuestion.youtubeVideoIds && currentYtIndex < currentQuestion.youtubeVideoIds.length - 1) {
-                                    setCurrentYtIndex(prev => prev + 1);
-                                  }
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <VisualClue
-                          language={roomState?.language || settings.language}
-                          imageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
-                          secondaryImageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
-                          secondaryImageSource={(roomState?.gameMode || settings.gameMode) === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
-                          imagePrompt={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
-                          category={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
-                          clue=""
-                          isAnswered={isAnswered}
-                          questionIndex={currentQuestionIndex}
-                          totalQuestions={quizData.questions.length}
-                          primaryColor={quizData.primaryColor}
-                          onPlayClickSound={() => soundEngine.playClick()}
-                          showTextClue={false}
-                          fullHeight={true}
-                        />
-                      )}
+                      <ErrorBoundary fallbackTitle="Média" fallbackMessage="Affichage média indisponible">
+                        {(roomState?.gameMode || settings.gameMode) === 'music_blind_test' ? (
+                          <BlindTestMusicPlayer
+                            question={currentQuestion}
+                            isAnswered={isAnswered}
+                            primaryColor={quizData.primaryColor}
+                            accentColor={quizData.accentColor}
+                            language={roomState?.language || settings.language}
+                            masterVolume={settings.masterVolume}
+                            questionMusicVolume={settings.questionMusicVolume}
+                            onPlayClickSound={() => soundEngine.playClick()}
+                          />
+                        ) : (
+                          <VisualClue
+                            language={roomState?.language || settings.language}
+                            imageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
+                            secondaryImageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
+                            secondaryImageSource={(roomState?.gameMode || settings.gameMode) === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
+                            imagePrompt={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
+                            category={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
+                            clue=""
+                            isAnswered={isAnswered}
+                            questionIndex={currentQuestionIndex}
+                            totalQuestions={quizData.questions.length}
+                            primaryColor={quizData.primaryColor}
+                            onPlayClickSound={() => soundEngine.playClick()}
+                            showTextClue={false}
+                            fullHeight={true}
+                          />
+                        )}
+                      </ErrorBoundary>
                     </div>
 
                     {/* Colonne Droite (Desktop): Score, Catégorie, Indice Texte */}

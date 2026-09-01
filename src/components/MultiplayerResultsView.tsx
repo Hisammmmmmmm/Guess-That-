@@ -511,7 +511,8 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
             <button
               onClick={() => {
                 onPlayClickSound?.();
-                onNewTheme?.() || onExitToMenu?.();
+                if (onNewTheme) onNewTheme();
+                else if (onExitToMenu) onExitToMenu();
               }}
               id="btn-new-theme-room"
               className="flex-1 min-w-[140px] px-5 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
@@ -580,7 +581,9 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                           {player.name}
                         </span>
                         {player.isHost && (
-                          <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" title={t('host', language)} />
+                          <span title={t('host', language)} className="flex items-center">
+                            <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          </span>
                         )}
                       </div>
                       {player.maxStreak >= 2 && (

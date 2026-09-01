@@ -388,7 +388,9 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                             {player.name}
                           </span>
                           {player.isHost && (
-                            <Crown className="w-3 h-3 text-amber-400 shrink-0" title={t('host', language)} />
+                            <span title={t('host', language)} className="flex items-center">
+                              <Crown className="w-3 h-3 text-amber-400 shrink-0" />
+                            </span>
                           )}
                         </div>
                         <span className="text-[9px] text-white/50 flex items-center gap-1">

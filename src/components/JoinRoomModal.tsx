@@ -24,6 +24,7 @@ interface JoinRoomModalProps {
   initialCode?: string;
   isCodeLocked?: boolean;
   isConnecting?: boolean;
+  isJoining?: boolean;
   errorMessage?: string | null;
 }
 
@@ -38,8 +39,10 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   initialCode = '',
   isCodeLocked = false,
   isConnecting = false,
+  isJoining = false,
   errorMessage = null,
 }) => {
+  const isActionLoading = isConnecting || isJoining;
   const [code, setCode] = useState(initialCode);
   const [playerName, setPlayerName] = useState('');
   const [avatar, setAvatar] = useState('🦊');

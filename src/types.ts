@@ -33,6 +33,9 @@ export interface Question {
   youtubeSearchQuery?: string;
   youtubeVideoId?: string;
   youtubeVideoIds?: string[];
+  audioPreviewUrl?: string;
+  audioTrackName?: string;
+  audioArtistName?: string;
   imagePrompt?: string;
   imageUrl?: string;
   secondaryImageUrl?: string;
