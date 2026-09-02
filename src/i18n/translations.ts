@@ -311,6 +311,7 @@ export const translations: Record<string, string> = {
   "preset_world_title": "Merveilles & Monuments du Monde",
   "preset_world_tag": "Voyage",
   "public_rooms": "Salons Publics",
+  "browse_public_rooms": "Salons publiques",
   "public_rooms_desc": "Rejoins une partie en cours créée par un autre joueur",
   "refresh_rooms": "Rafraîchir",
   "filter_by_country": "Filtrer",

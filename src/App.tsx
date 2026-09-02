@@ -366,6 +366,9 @@ export default function App() {
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
       }
+      if (data.room?.gameMode) {
+        setSettings((prev) => ({ ...prev, gameMode: data.room.gameMode }));
+      }
       setCurrentQuestionIndex(data.room.currentQuestionIndex || 0);
       setSelectedOption(null);
       setIsAnswered(false);
@@ -606,7 +609,10 @@ export default function App() {
 
     // Randomize options order for every single question
     const preparedData = prepareQuizData(rawData);
+    const targetMode = (preparedData.gameMode || rawData.gameMode || settings.gameMode || 'quiz') as GameMode;
+    preparedData.gameMode = targetMode;
 
+    setSettings((prev) => ({ ...prev, gameMode: targetMode }));
     setQuizData(preparedData);
     setCurrentQuestionIndex(0);
     setSelectedOption(null);
@@ -630,7 +636,7 @@ export default function App() {
 
     setScreen('playing');
 
-    if (settings.musicEnabled && settings.gameMode !== 'music_blind_test') {
+    if (settings.musicEnabled && targetMode !== 'music_blind_test') {
       soundEngine.startAmbience(preparedData.ambientSound || 'synthwave');
     }
   };
@@ -815,12 +821,21 @@ export default function App() {
           ? {
               ...fallbackTheme,
               ...generatedData,
+              gameMode: finalMode,
+              difficulty: finalDifficulty,
+              gameStyle: finalStyle,
               themeTitle: generatedData.themeTitle || t(`preset_${fallbackTheme.id}_title`, settings.language) || fallbackTheme.title,
               themeDescription: generatedData.themeDescription || t(`preset_${fallbackTheme.id}_desc`, settings.language) || fallbackTheme.description,
               questions: generatedData.questions,
             }
-          : generatedData
+          : {
+              ...generatedData,
+              gameMode: finalMode,
+              difficulty: finalDifficulty,
+              gameStyle: finalStyle,
+            }
       );
+      finalPreparedData.gameMode = finalMode;
       setPendingQuizData(finalPreparedData);
       setQuizData(finalPreparedData);
       setIsGenerating(false);
@@ -843,6 +858,14 @@ export default function App() {
       }
     }
   };
+
+  // Active game mode resolved with priority: roomState (if in room/lobby/results/competitive_room) -> quizData -> settings
+  const activeGameMode: GameMode = (
+    (roomState && (screen === 'room_lobby' || screen === 'room_results' || settings.gameStyle === 'competitive_room') ? roomState.gameMode : undefined) ||
+    quizData?.gameMode ||
+    settings.gameMode ||
+    'quiz'
+  ) as GameMode;
 
   // --- QUESTION & TIMER LIFECYCLE ---
   const currentQuestion: Question | undefined = quizData?.questions[currentQuestionIndex];
@@ -969,7 +992,7 @@ export default function App() {
         clearInterval(timerRef.current);
       }
     };
-  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, settings.gameMode, handleTimeUp, stopTimer, isPaused]);
+  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, activeGameMode, handleTimeUp, stopTimer, isPaused]);
 
   // Ref for the TTS audio so we can cancel it
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1008,7 +1031,7 @@ export default function App() {
         };
       }
     }
-  }, [screen, currentQuestionIndex, currentQuestion?.id, isAnswered, settings.speechCluesEnabled, settings.gameMode]);
+  }, [screen, currentQuestionIndex, currentQuestion?.id, isAnswered, settings.speechCluesEnabled, activeGameMode]);
 
   // Volume synchronization
   useEffect(() => {
@@ -1018,7 +1041,7 @@ export default function App() {
       soundEngine.setMusicMuted(false);
       soundEngine.setMusicVolume(settings.musicVolume);
     }
-  }, [settings.gameMode, settings.musicVolume, settings.musicEnabled, screen]);
+  }, [activeGameMode, settings.musicVolume, settings.musicEnabled, screen]);
 
   // Manage YouTube Background Music for Menu and Themes
   useEffect(() => {
@@ -1055,18 +1078,18 @@ export default function App() {
 
     if (screen === 'playing') {
       if (quizData) {
-        if (settings.gameMode === 'music_blind_test') {
+        if (activeGameMode === 'music_blind_test') {
           soundEngine.stopAmbience();
         } else {
           soundEngine.startAmbience(quizData.ambientSound || 'synthwave');
         }
 
-        if (settings.gameMode === 'music_blind_test') {
+        if (activeGameMode === 'music_blind_test') {
           setYtVideoId(null);
           return;
         }
 
-        if (settings.gameMode === 'quiz' && currentQuestion) {
+        if (activeGameMode === 'quiz' && currentQuestion) {
           // If the question has a specific video ID (pre-fetched or defined)
           if (currentQuestion.youtubeVideoId) {
             setYtVideoId(currentQuestion.youtubeVideoId);
@@ -1124,7 +1147,7 @@ export default function App() {
     return () => {
       isActive = false;
     };
-  }, [screen, currentQuestion?.id, quizData?.topic, quizData?.themeTitle, quizData?.themeYoutubeVideoId, settings.musicEnabled, settings.gameMode]);
+  }, [screen, currentQuestion?.id, quizData?.topic, quizData?.themeTitle, quizData?.themeYoutubeVideoId, settings.musicEnabled, activeGameMode]);
 
   // Option Selected Handler
   const handleSelectOption = (option: string) => {
@@ -1275,11 +1298,11 @@ export default function App() {
     }
     if (currentRoomCode || currentRoomCodeRef.current) {
       multiplayerService.leaveRoom(currentRoomCode || currentRoomCodeRef.current || '');
-      setRoomState(null);
-      setCurrentRoomCode(null);
-      currentRoomCodeRef.current = null;
-      setCurrentPlayerId(null);
     }
+    setRoomState(null);
+    setCurrentRoomCode(null);
+    currentRoomCodeRef.current = null;
+    setCurrentPlayerId(null);
     setScreen('menu');
   };
 
@@ -1350,7 +1373,7 @@ export default function App() {
       />
 
       <DynamicBackground
-        bgImage={settings.gameMode === 'visual_blind_test' || settings.gameMode === 'music_blind_test' ? undefined : quizData?.themeBgImage}
+        bgImage={activeGameMode === 'visual_blind_test' || activeGameMode === 'music_blind_test' ? undefined : quizData?.themeBgImage}
         primaryColor={quizData?.primaryColor}
         accentColor={quizData?.accentColor}
       />
@@ -1388,9 +1411,9 @@ export default function App() {
               const baseVol = Math.round((settings.menuMusicVolume ?? settings.musicVolume ?? 0.1) * (settings.masterVolume ?? 1.0) * 100);
               let targetVol = baseVol;
               if (screen === 'playing') {
-                if (settings.gameMode === 'quiz') {
+                if (activeGameMode === 'quiz') {
                   targetVol = Math.min(25, baseVol * 0.25);
-                } else if (settings.gameMode === 'visual_blind_test') {
+                } else if (activeGameMode === 'visual_blind_test') {
                   targetVol = Math.max(1, Math.round(baseVol * 0.10)); // Reduced to 10% in visual blind test
                 }
               }
@@ -1464,7 +1487,7 @@ export default function App() {
             streak={stats.streak}
             correctCount={stats.correctAnswers}
             primaryColor={quizData.primaryColor}
-            gameMode={settings.gameMode}
+            gameMode={activeGameMode}
             themeTitle={quizData.themeTitle}
           />
         )}
@@ -1763,7 +1786,7 @@ export default function App() {
                       </div>
 
                       {/* Cadre Indice Audio (si mode non blind test musical) */}
-                      {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
+                      {activeGameMode !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-md flex items-center justify-center shrink-0">
                           <ErrorBoundary fallbackTitle="Indice audio" fallbackMessage="Lecteur audio en veille">
                             <AudioCluePlayer
@@ -1772,7 +1795,7 @@ export default function App() {
                               speechEnabled={settings.speechCluesEnabled}
                               primaryColor={quizData.primaryColor}
                               youtubeVideoId={activeVideoId}
-                              gameMode={roomState?.gameMode || settings.gameMode}
+                              gameMode={activeGameMode}
                               language={roomState?.language || settings.language}
                               volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                             />
@@ -1784,7 +1807,7 @@ export default function App() {
                     {/* Colonne Centrale (Mobile & Desktop): Cadre Média UNIQUE */}
                     <div className="w-full md:col-span-6 h-[105px] xs:h-[125px] sm:h-[165px] md:h-[200px] rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-inner relative shrink-0">
                       <ErrorBoundary fallbackTitle="Média" fallbackMessage="Affichage média indisponible">
-                        {(roomState?.gameMode || settings.gameMode) === 'music_blind_test' ? (
+                        {activeGameMode === 'music_blind_test' ? (
                           <BlindTestMusicPlayer
                             question={currentQuestion}
                             isAnswered={isAnswered}
@@ -1798,11 +1821,11 @@ export default function App() {
                         ) : (
                           <VisualClue
                             language={roomState?.language || settings.language}
-                            imageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
-                            secondaryImageUrl={(roomState?.gameMode || settings.gameMode) === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
-                            secondaryImageSource={(roomState?.gameMode || settings.gameMode) === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
-                            imagePrompt={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
-                            category={(roomState?.gameMode || settings.gameMode) === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
+                            imageUrl={activeGameMode === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
+                            secondaryImageUrl={activeGameMode === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
+                            secondaryImageSource={activeGameMode === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
+                            imagePrompt={activeGameMode === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
+                            category={activeGameMode === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
                             clue=""
                             isAnswered={isAnswered}
                             questionIndex={currentQuestionIndex}
@@ -1834,7 +1857,7 @@ export default function App() {
                       )}
 
                       {/* Cadre Catégorie */}
-                      {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
+                      {activeGameMode !== 'music_blind_test' && (
                         <div className="bg-black/30 backdrop-blur-md px-2 py-1.5 rounded-xl border border-white/10 shadow-md text-center flex flex-row items-center justify-between shrink-0">
                           <span className="text-[8px] uppercase tracking-wider text-white/50 font-bold">{t('category', roomState?.language || settings.language)}</span>
                           <span className="text-xs font-bold text-white capitalize truncate max-w-[120px]">{currentQuestion.category}</span>
@@ -1852,7 +1875,7 @@ export default function App() {
                   </div>
 
                   {/* Indice Audio Mobile (si non blind test musical) */}
-                  {(roomState?.gameMode || settings.gameMode) !== 'music_blind_test' && (
+                  {activeGameMode !== 'music_blind_test' && (
                     <div className="md:hidden bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center justify-center shrink-0">
                       <AudioCluePlayer
                         audioNotes={currentQuestion.audioNotes}
@@ -1860,7 +1883,7 @@ export default function App() {
                         speechEnabled={settings.speechCluesEnabled}
                         primaryColor={quizData.primaryColor}
                         youtubeVideoId={activeVideoId}
-                        gameMode={roomState?.gameMode || settings.gameMode}
+                        gameMode={activeGameMode}
                         language={roomState?.language || settings.language}
                         volume={Math.round((settings.questionMusicVolume ?? 0.8) * (settings.masterVolume ?? 1.0) * 100)}
                       />
@@ -1870,44 +1893,14 @@ export default function App() {
 
                 {/* 2. BAS DU CONTENEUR: Question & Choix de réponses */}
                 <div className="w-full flex flex-col gap-1 sm:gap-2 shrink-0 mt-0.5">
-                  {/* Titre de la question : défilement continu permanent sur smartphone, conditionnel sur desktop */}
-                  <div className="px-1 text-center shrink-0 overflow-hidden w-full">
-                    {/* Mobile / Smartphone : défilement continu permanent */}
-                    <div className="md:hidden w-full overflow-hidden whitespace-nowrap relative py-0.5">
-                      <div
-                        className="animate-marquee-smooth inline-block text-xs sm:text-sm font-black text-white leading-tight font-heading drop-shadow-md px-2"
-                        style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-                      >
-                        <span>{currentQuestion.question}</span>
-                        <span className="inline-block mx-6 text-purple-400 font-bold opacity-60">•</span>
-                        <span>{currentQuestion.question}</span>
-                        <span className="inline-block mx-6 text-purple-400 font-bold opacity-60">•</span>
-                        <span>{currentQuestion.question}</span>
-                      </div>
-                    </div>
-
-                    {/* Écrans moyens et Desktop */}
-                    <div className="hidden md:block">
-                      {currentQuestion.question.length > 80 ? (
-                        <div className="w-full overflow-hidden whitespace-nowrap relative">
-                          <h2
-                            className="animate-marquee-smooth inline-block text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md px-2"
-                            style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-                          >
-                            <span>{currentQuestion.question}</span>
-                            <span className="inline-block mx-8 text-purple-400 font-bold opacity-60">•</span>
-                            <span>{currentQuestion.question}</span>
-                          </h2>
-                        </div>
-                      ) : (
-                        <h2
-                          className="text-base md:text-lg font-black text-white leading-tight font-heading drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis px-1"
-                          style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-                        >
-                          {currentQuestion.question}
-                        </h2>
-                      )}
-                    </div>
+                  {/* Titre de la question : affichage sur deux lignes si trop longue, sans défilement */}
+                  <div className="px-1 text-center shrink-0 w-full flex items-center justify-center min-h-[36px] sm:min-h-[44px]">
+                    <h2
+                      className="text-xs sm:text-sm md:text-base lg:text-lg font-black text-white leading-snug font-heading drop-shadow-md line-clamp-2 px-2 max-w-4xl mx-auto break-words"
+                      style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
+                    >
+                      {currentQuestion.question}
+                    </h2>
                   </div>
 
                   {/* Cadre des réponses */}

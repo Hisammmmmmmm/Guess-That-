@@ -57,6 +57,9 @@ export interface QuizData {
   questions: Question[];
   quotaExceededNotice?: boolean;
   fallbackUsed?: boolean;
+  gameMode?: GameMode;
+  difficulty?: GameDifficulty;
+  gameStyle?: GameStyle;
 }
 
 export type GameDifficulty = 'easy' | 'medium' | 'hard' | 'expert';

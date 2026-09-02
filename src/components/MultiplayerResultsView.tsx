@@ -156,6 +156,8 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
       }
       const preparedData = {
         ...data,
+        gameMode: selectedMode,
+        difficulty: roomState.difficulty || 'medium',
         questions: (data.questions || []).map((q: any, idx: number) => ({
           ...q,
           id: idx + 1,

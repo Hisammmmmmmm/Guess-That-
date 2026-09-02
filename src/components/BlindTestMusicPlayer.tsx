@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import YouTube, { YouTubePlayer } from 'react-youtube';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Radio, Music, Maximize2, X, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -79,16 +79,25 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
     const finalVol = isMuted ? 0 : computedVolume;
     if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
       try {
-        ytPlayerRef.current.setVolume(finalVol);
-        if (isMuted) ytPlayerRef.current.mute();
-        else ytPlayerRef.current.unMute();
+        if (activeSource === 'youtube') {
+          ytPlayerRef.current.setVolume(finalVol);
+          if (isMuted) ytPlayerRef.current.mute();
+          else ytPlayerRef.current.unMute();
+        } else {
+          ytPlayerRef.current.mute();
+        }
       } catch {}
     }
     if (audioTagRef.current) {
-      audioTagRef.current.volume = finalVol / 100;
-      audioTagRef.current.muted = isMuted;
+      if (activeSource === 'audio_preview') {
+        audioTagRef.current.volume = finalVol / 100;
+        audioTagRef.current.muted = isMuted;
+      } else {
+        audioTagRef.current.muted = true;
+        audioTagRef.current.pause();
+      }
     }
-  }, [computedVolume, isMuted]);
+  }, [computedVolume, isMuted, activeSource]);
 
   // Fetch YouTube video candidates dynamically if none exist on question (to ensure YouTube priority)
   useEffect(() => {
@@ -217,14 +226,53 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
     return () => clearInterval(interval);
   }, [isPlaying]);
 
+  // Stable YouTube player options so changing isAnswered doesn't re-render/interrupt the player
+  const ytPlayerOpts = useMemo(
+    () => ({
+      width: '100%',
+      height: '100%',
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        start: 3,
+        vq: 'large', // 480p high quality playback
+        enablejsapi: 1,
+      },
+    }),
+    []
+  );
+
+  // Ensure YouTube video and audio keep playing continuously without stopping when answering
+  useEffect(() => {
+    if (isAnswered && activeSource === 'youtube' && ytPlayerRef.current) {
+      try {
+        ytPlayerRef.current.playVideo();
+        if (!isMuted) {
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(computedVolume);
+        }
+      } catch (err) {
+        console.warn('Continuous YouTube playback on answer error:', err);
+      }
+    }
+  }, [isAnswered, activeSource, isMuted, computedVolume]);
+
   // Start Playback across active source with YouTube first
   const startPlayback = useCallback((forcedSource?: 'youtube' | 'audio_preview' | 'synth') => {
     const targetSource = forcedSource || activeSource;
     soundEngine.unlockAudio();
 
     // Priority 1: YouTube video
-    if (targetSource === 'youtube' && currentVideoId) {
-      if (ytPlayerRef.current) {
+    if (targetSource === 'youtube') {
+      // Ensure audio preview is stopped and muted
+      if (audioTagRef.current) {
+        audioTagRef.current.pause();
+        audioTagRef.current.muted = true;
+      }
+
+      if (currentVideoId && ytPlayerRef.current) {
         try {
           ytPlayerRef.current.unMute();
           ytPlayerRef.current.setVolume(isMuted ? 0 : computedVolume);
@@ -234,15 +282,24 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
           setPlaybackError(null);
           return;
         } catch (err) {
-          console.warn('YouTube play attempt failed, retrying candidates or fallback', err);
+          console.warn('YouTube play attempt failed', err);
         }
       }
+      return;
     }
 
     // Priority 2: Audio preview HQ MP3
-    if ((targetSource === 'audio_preview' || targetSource === 'youtube') && audioPreviewUrl) {
-      setActiveSource('audio_preview');
-      if (audioTagRef.current) {
+    if (targetSource === 'audio_preview') {
+      // Ensure YouTube is paused and muted
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.pauseVideo();
+          ytPlayerRef.current.mute();
+        } catch {}
+      }
+
+      if (audioPreviewUrl && audioTagRef.current) {
+        audioTagRef.current.muted = isMuted;
         audioTagRef.current.volume = isMuted ? 0 : computedVolume / 100;
         audioTagRef.current.currentTime = 0;
         audioTagRef.current.play()
@@ -260,14 +317,25 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
     }
 
     // Priority 3: Web Audio Synth Melody
-    setActiveSource('synth');
-    soundEngine.playAudioClue(question.audioNotes || [330, 392, 440, 523.25, 659.25]);
-    setIsPlaying(true);
-    const duration = ((question.audioNotes?.length || 6) * 160) + 600;
-    if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
-    synthTimerRef.current = window.setTimeout(() => {
-      setIsPlaying(false);
-    }, duration);
+    if (targetSource === 'synth') {
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.pauseVideo();
+          ytPlayerRef.current.mute();
+        } catch {}
+      }
+      if (audioTagRef.current) {
+        audioTagRef.current.pause();
+        audioTagRef.current.muted = true;
+      }
+      soundEngine.playAudioClue(question.audioNotes || [330, 392, 440, 523.25, 659.25]);
+      setIsPlaying(true);
+      const duration = ((question.audioNotes?.length || 6) * 160) + 600;
+      if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
+      synthTimerRef.current = window.setTimeout(() => {
+        setIsPlaying(false);
+      }, duration);
+    }
   }, [activeSource, currentVideoId, audioPreviewUrl, computedVolume, isMuted, question.audioNotes, language]);
 
   const pausePlayback = useCallback(() => {
@@ -296,6 +364,12 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
     setProgressPct(0);
     if (activeSource === 'youtube' && ytPlayerRef.current) {
       try {
+        if (audioTagRef.current) {
+          audioTagRef.current.pause();
+          audioTagRef.current.muted = true;
+        }
+        ytPlayerRef.current.unMute();
+        ytPlayerRef.current.setVolume(isMuted ? 0 : computedVolume);
         ytPlayerRef.current.seekTo(3, true);
         ytPlayerRef.current.playVideo();
         setIsPlaying(true);
@@ -303,6 +377,14 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
       } catch {}
     }
     if (activeSource === 'audio_preview' && audioTagRef.current) {
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.pauseVideo();
+          ytPlayerRef.current.mute();
+        } catch {}
+      }
+      audioTagRef.current.muted = isMuted;
+      audioTagRef.current.volume = isMuted ? 0 : computedVolume / 100;
       audioTagRef.current.currentTime = 0;
       audioTagRef.current.play().catch(() => {});
       setIsPlaying(true);
@@ -311,27 +393,58 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
     startPlayback();
   };
 
-  const handleSwitchSource = () => {
+  // Switch to specific audio source (YouTube HQ or Extrait Audio HQ)
+  const selectSource = (source: 'youtube' | 'audio_preview') => {
     onPlayClickSound?.();
-    pausePlayback();
-    if (activeSource === 'youtube') {
-      if (audioPreviewUrl) {
-        setActiveSource('audio_preview');
-        setTimeout(() => startPlayback('audio_preview'), 150);
-      } else {
-        setActiveSource('synth');
-        setTimeout(() => startPlayback('synth'), 150);
+    if (source === activeSource) {
+      togglePlayPause();
+      return;
+    }
+
+    setActiveSource(source);
+    setPlaybackError(null);
+
+    if (source === 'youtube') {
+      // Mute and pause audio preview
+      if (audioTagRef.current) {
+        audioTagRef.current.pause();
+        audioTagRef.current.muted = true;
       }
-    } else if (activeSource === 'audio_preview') {
-      setActiveSource('synth');
-      setTimeout(() => startPlayback('synth'), 150);
-    } else {
-      if (currentVideoId) {
-        setActiveSource('youtube');
-        setTimeout(() => startPlayback('youtube'), 150);
-      } else if (audioPreviewUrl) {
-        setActiveSource('audio_preview');
-        setTimeout(() => startPlayback('audio_preview'), 150);
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.unMute();
+          ytPlayerRef.current.setVolume(isMuted ? 0 : computedVolume);
+          ytPlayerRef.current.playVideo();
+          setIsPlaying(true);
+        } catch (err) {
+          console.warn('YouTube play on select error:', err);
+        }
+      } else {
+        setTimeout(() => startPlayback('youtube'), 100);
+      }
+    } else if (source === 'audio_preview') {
+      // Mute and pause YouTube
+      if (ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current.pauseVideo();
+          ytPlayerRef.current.mute();
+        } catch {}
+      }
+      if (audioTagRef.current) {
+        audioTagRef.current.muted = isMuted;
+        audioTagRef.current.volume = isMuted ? 0 : computedVolume / 100;
+        audioTagRef.current.currentTime = 0;
+        audioTagRef.current.play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            console.warn('Audio tag play error on switch:', err);
+            setIsPlaying(false);
+            setPlaybackError(t('click_to_play', language) || 'Cliquez pour écouter');
+          });
+      } else {
+        setTimeout(() => startPlayback('audio_preview'), 100);
       }
     }
   };
@@ -343,18 +456,36 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
       if (typeof e.target.setPlaybackQuality === 'function') {
         e.target.setPlaybackQuality('large'); // 480p
       }
-      if (typeof e.target.setVolume === 'function') {
-        e.target.setVolume(isMuted ? 0 : computedVolume);
+      if (activeSource === 'youtube') {
+        if (typeof e.target.setVolume === 'function') {
+          e.target.setVolume(isMuted ? 0 : computedVolume);
+        }
+        if (typeof e.target.unMute === 'function') {
+          if (!isMuted) e.target.unMute();
+        }
+        if (typeof e.target.playVideo === 'function') {
+          e.target.playVideo();
+        }
+        setIsPlaying(true);
+        // Ensure audio preview is strictly muted & paused
+        if (audioTagRef.current) {
+          audioTagRef.current.pause();
+          audioTagRef.current.muted = true;
+        }
+      } else {
+        if (typeof e.target.mute === 'function') {
+          e.target.mute();
+        }
+        if (typeof e.target.pauseVideo === 'function') {
+          e.target.pauseVideo();
+        }
       }
-      if (typeof e.target.playVideo === 'function') {
-        e.target.playVideo();
-      }
-      setIsPlaying(true);
     } catch {}
   };
 
   const handleYtStateChange = (e: any) => {
     // 1 = playing, 2 = paused, 0 = ended, -1 = unstarted
+    if (activeSource !== 'youtube') return;
     if (e.data === 1) {
       setIsPlaying(true);
       setPlaybackError(null);
@@ -407,8 +538,13 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
           src={audioPreviewUrl}
           loop
           preload="auto"
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          muted={activeSource !== 'audio_preview' || isMuted}
+          onPlay={() => {
+            if (activeSource === 'audio_preview') setIsPlaying(true);
+          }}
+          onPause={() => {
+            if (activeSource === 'audio_preview') setIsPlaying(false);
+          }}
           onError={() => {
             console.warn('Audio tag playback error, switching to synth melody');
             if (activeSource === 'audio_preview') {
@@ -430,19 +566,7 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
         >
           <YouTube
             videoId={currentVideoId}
-            opts={{
-              width: '100%',
-              height: '100%',
-              playerVars: {
-                autoplay: 1,
-                controls: isAnswered ? 1 : 0,
-                disablekb: 1,
-                fs: 0,
-                start: 3,
-                vq: 'large', // 480p high quality playback
-                enablejsapi: 1,
-              },
-            }}
+            opts={ytPlayerOpts}
             className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full [&>iframe]:rounded-xl sm:[&>iframe]:rounded-2xl"
             onReady={handleYtReady}
             onStateChange={handleYtStateChange}
@@ -547,25 +671,47 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
           isAnswered && activeSource === 'youtube' ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
       >
-        {/* Top Bar: Source Badge & Replay Button */}
-        <div className="w-full flex items-center justify-between px-1 shrink-0">
-          <button
-            onClick={handleSwitchSource}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-[9px] sm:text-[10px] text-white/80 font-medium transition-all backdrop-blur-sm active:scale-95 cursor-pointer"
-            title={t('switch_audio_source', language) || 'Changer de source audio en cas de blocage'}
-          >
-            <Radio className="w-3 h-3 text-pink-400 animate-pulse" />
-            <span>
-              {activeSource === 'youtube'
-                ? 'YouTube HQ'
-                : activeSource === 'audio_preview'
-                ? 'Extrait Audio HQ'
-                : 'Mélodie Synthé'}
-            </span>
-          </button>
-
-          <div className="flex items-center gap-1.5">
+        {/* Top Bar: Dual Source Buttons (YouTube HQ & Extrait audio HQ) & Replay/Mute Controls */}
+        <div className="w-full flex items-center justify-between px-1 shrink-0 gap-1.5">
+          {/* Side-by-side Source Selector Buttons */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {/* YouTube HQ Button */}
             <button
+              id="btn-source-youtube"
+              type="button"
+              onClick={() => selectSource('youtube')}
+              className={`flex items-center gap-1 px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold transition-all backdrop-blur-sm active:scale-95 cursor-pointer shrink-0 ${
+                activeSource === 'youtube'
+                  ? 'bg-red-600/90 text-white shadow-md shadow-red-600/30 border border-red-400 ring-1 ring-red-400/50'
+                  : 'bg-white/10 hover:bg-white/20 text-white/60 hover:text-white border border-white/10'
+              }`}
+              title="Écouter la piste YouTube HQ"
+            >
+              <Radio className={`w-3 h-3 ${activeSource === 'youtube' ? 'text-white animate-pulse' : 'text-white/50'}`} />
+              <span className="whitespace-nowrap">YouTube HQ</span>
+            </button>
+
+            {/* Extrait audio HQ Button */}
+            <button
+              id="btn-source-audio-preview"
+              type="button"
+              onClick={() => selectSource('audio_preview')}
+              className={`flex items-center gap-1 px-2.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold transition-all backdrop-blur-sm active:scale-95 cursor-pointer shrink-0 ${
+                activeSource === 'audio_preview'
+                  ? 'bg-purple-600/90 text-white shadow-md shadow-purple-600/30 border border-purple-400 ring-1 ring-purple-400/50'
+                  : 'bg-white/10 hover:bg-white/20 text-white/60 hover:text-white border border-white/10'
+              }`}
+              title="Écouter l'extrait audio HQ"
+            >
+              <Music className={`w-3 h-3 ${activeSource === 'audio_preview' ? 'text-white animate-pulse' : 'text-white/50'}`} />
+              <span className="whitespace-nowrap">Extrait audio HQ</span>
+            </button>
+          </div>
+
+          {/* Right Controls: Mute & Replay */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              id="btn-toggle-blindtest-mute"
               onClick={() => setIsMuted((prev) => !prev)}
               className="p-1 rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition-all cursor-pointer"
               title={isMuted ? 'Activer le son' : 'Couper le son'}
@@ -574,12 +720,13 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
             </button>
 
             <button
+              id="btn-blindtest-replay"
               onClick={handleReplay}
               className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-[9px] sm:text-[10px] text-white/80 font-medium transition-all active:scale-95 cursor-pointer"
               title="Réécouter depuis le début"
             >
               <RotateCcw className="w-2.5 h-2.5" />
-              <span>{t('replay', language) || 'Rejouer'}</span>
+              <span className="hidden xs:inline">{t('replay', language) || 'Rejouer'}</span>
             </button>
           </div>
         </div>
@@ -615,21 +762,29 @@ export const BlindTestMusicPlayer: React.FC<BlindTestMusicPlayerProps> = ({
             <div className="absolute inset-3 rounded-full border border-white/10 pointer-events-none" />
             <div className="absolute inset-5 rounded-full border border-white/10 pointer-events-none" />
 
-            {/* Center Label / Play Button */}
+            {/* Center Label / Game Logo Center Disc */}
             <button
               onClick={togglePlayPause}
               id="btn-toggle-blindtest-music"
-              className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer transform active:scale-90 hover:scale-105 transition-all z-20"
+              className="relative w-8 h-8 xs:w-9 xs:h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-white shadow-lg cursor-pointer transform active:scale-90 hover:scale-105 transition-all z-20 overflow-hidden group p-0.5 border border-white/30"
               style={{
                 background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})`,
               }}
               title={isPlaying ? 'Mettre en pause' : 'Lancer l’écoute'}
             >
-              {isPlaying ? (
-                <Pause className="w-4 h-4 fill-current" />
-              ) : (
-                <Play className="w-4 h-4 ml-0.5 fill-current animate-pulse" />
-              )}
+              <div className="w-full h-full rounded-full overflow-hidden bg-[#0F0A1F] flex items-center justify-center relative">
+                <img
+                  src="/logo5.png"
+                  alt="Guess That! Logo"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover rounded-full select-none pointer-events-none"
+                />
+                {!isPlaying && (
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center transition-all">
+                    <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 text-white fill-current animate-pulse drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" />
+                  </div>
+                )}
+              </div>
             </button>
           </div>
 

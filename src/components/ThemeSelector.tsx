@@ -299,8 +299,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                         className="flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex items-center justify-center gap-1 sm:gap-1.5 shadow-lg shadow-purple-900/40 cursor-pointer transition-all transform hover:scale-105 active:scale-95 whitespace-nowrap"
                       >
                         <Globe2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="sm:hidden">Salon publique</span>
-                        <span className="hidden sm:inline truncate">{t('browse_public_rooms', language)}</span>
+                        <span className="truncate">{t('browse_public_rooms', language)}</span>
                       </button>
                     )}
 
