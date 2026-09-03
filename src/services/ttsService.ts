@@ -17,8 +17,28 @@ const LANG_LOCALE_MAP: Record<string, string> = {
 class TTSService {
   private currentAudio: HTMLAudioElement | null = null;
   private isSynthesizing = false;
+  private volume = 1.0;
+  private activeResolve: (() => void) | null = null;
+
+  public setVolume(vol: number) {
+    this.volume = Math.max(0, Math.min(1, vol));
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.volume = this.volume;
+      } catch {}
+    }
+  }
+
+  public getVolume(): number {
+    return this.volume;
+  }
 
   public stop() {
+    if (this.activeResolve) {
+      this.activeResolve();
+      this.activeResolve = null;
+    }
+
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -45,6 +65,9 @@ class TTSService {
     if (!text || !text.trim()) return;
 
     this.stop();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('app:stop-tts'));
+    }
     this.isSynthesizing = true;
 
     const cleanText = text.slice(0, 280).trim();
@@ -55,6 +78,17 @@ class TTSService {
     const streamUrl = `/api/tts?text=${encodeURIComponent(cleanText)}&lang=${encodeURIComponent(targetLang)}`;
 
     return new Promise(async (resolve) => {
+      this.activeResolve = resolve;
+
+      const finish = () => {
+        this.isSynthesizing = false;
+        this.currentAudio = null;
+        if (this.activeResolve) {
+          this.activeResolve();
+          this.activeResolve = null;
+        }
+      };
+
       try {
         const response = await fetch(streamUrl);
         if (!response.ok) throw new Error('Network response was not ok');
@@ -63,18 +97,16 @@ class TTSService {
 
         const audio = new Audio();
         this.currentAudio = audio;
+        audio.volume = this.volume;
 
         audio.onended = () => {
-          this.isSynthesizing = false;
-          this.currentAudio = null;
-          resolve();
+          finish();
         };
 
         audio.onerror = () => {
           // Fallback to local SpeechSynthesis if network fails
           this.fallbackSpeechSynthesis(cleanText, locale).finally(() => {
-            this.isSynthesizing = false;
-            resolve();
+            finish();
           });
         };
 
@@ -82,14 +114,12 @@ class TTSService {
         audio.play().catch(() => {
           // In case autoplay is restricted or network failed, fallback to SpeechSynthesis
           this.fallbackSpeechSynthesis(cleanText, locale).finally(() => {
-            this.isSynthesizing = false;
-            resolve();
+            finish();
           });
         });
       } catch {
         this.fallbackSpeechSynthesis(cleanText, locale).finally(() => {
-          this.isSynthesizing = false;
-          resolve();
+          finish();
         });
       }
     });
@@ -112,6 +142,7 @@ class TTSService {
         utterance.lang = locale;
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
+        utterance.volume = this.volume;
 
         // Try to match matching voice
         const voices = window.speechSynthesis.getVoices();

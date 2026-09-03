@@ -40,11 +40,13 @@ interface ServerRoom {
   difficulty: string;
   gameMode: string;
   gameStyle: string;
+  language?: string;
   durationPerQuestion: number;
   currentQuestionIndex: number;
   questionStartTime: number;
   quizData: any;
   newQuizReady?: boolean;
+  isPublic?: boolean;
   players: Map<string, ServerPlayer>;
   createdAt: number;
   autoNextTimer?: any;
@@ -85,11 +87,13 @@ function serializeRoom(room: ServerRoom) {
     difficulty: room.difficulty,
     gameMode: room.gameMode,
     gameStyle: room.gameStyle,
+    language: room.language || 'fr',
     durationPerQuestion: room.durationPerQuestion,
     currentQuestionIndex: room.currentQuestionIndex,
     questionStartTime: room.questionStartTime,
     quizData: room.quizData,
     newQuizReady: room.newQuizReady,
+    isPublic: room.isPublic !== false,
     players: playersObj,
   };
 }
@@ -117,6 +121,77 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
+
+  let totalQuizGenerations = 1842;
+
+  function getGlobalStats() {
+    let roomPlayers = 0;
+    activeRooms.forEach((room) => {
+      roomPlayers += room.players.size;
+    });
+    const connectedClients = wss.clients ? wss.clients.size : 0;
+    const onlinePlayers = Math.max(roomPlayers, connectedClients, 1);
+
+    return {
+      onlinePlayers,
+      activeRooms: activeRooms.size,
+      totalGenerations: totalQuizGenerations,
+    };
+  }
+
+  function broadcastGlobalStats() {
+    const stats = getGlobalStats();
+    const payload = JSON.stringify({
+      type: 'global_stats',
+      stats,
+    });
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    });
+  }
+
+  function getPublicRoomsSummary(gameModeFilter?: string) {
+    const list: any[] = [];
+    activeRooms.forEach((room) => {
+      if (room.isPublic === false) return;
+      if (gameModeFilter && gameModeFilter !== 'all' && room.gameMode !== gameModeFilter) return;
+
+      const host = room.players.get(room.hostId);
+      list.push({
+        code: room.code,
+        hostName: host?.name || 'Hôte',
+        hostAvatar: host?.avatar || '👑',
+        themeTitle: room.themeTitle || room.topic || 'Blind Test',
+        topic: room.topic || 'Blind Test',
+        gameMode: room.gameMode || 'quiz',
+        difficulty: room.difficulty || 'medium',
+        language: room.language || 'fr',
+        playerCount: room.players.size,
+        maxPlayers: 12,
+        status: room.status,
+        isPublic: true,
+        currentQuestionIndex: room.currentQuestionIndex,
+        totalQuestions: room.quizData?.questions?.length || 15,
+        createdAt: room.createdAt,
+      });
+    });
+
+    return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  function broadcastPublicRooms() {
+    const payload = JSON.stringify({
+      type: 'public_rooms_list',
+      rooms: getPublicRoomsSummary(),
+    });
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    });
+  }
 
   app.use(express.json());
 
@@ -474,12 +549,13 @@ async function startServer() {
   app.get('/api/tts', async (req, res) => {
     try {
       const text = req.query.text as string;
+      const lang = (req.query.lang as string) || 'fr';
       if (!text) {
         return res.status(400).json({ error: 'Text is required' });
       }
       const googleTTS = await import('google-tts-api');
       const base64Audio = await googleTTS.getAudioBase64(text.slice(0, 200), {
-        lang: 'fr',
+        lang: lang,
         slow: false,
         host: 'https://translate.google.com',
       });
@@ -781,6 +857,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
     }
 
     parsedData.topic = topic;
+    totalQuizGenerations += 1;
+    broadcastGlobalStats();
     return res.json(parsedData);
   });
 
@@ -806,10 +884,35 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
     });
   });
 
+  // Platform statistics endpoint
+  app.get('/api/stats', (req, res) => {
+    return res.json(getGlobalStats());
+  });
+
+  // Public rooms directory endpoint
+  app.get('/api/public-rooms', (req, res) => {
+    const gameMode = typeof req.query.gameMode === 'string' ? req.query.gameMode : undefined;
+    return res.json({
+      rooms: getPublicRoomsSummary(gameMode),
+      stats: getGlobalStats(),
+    });
+  });
+
   // WebSocket Multiplayer Server Logic
   wss.on('connection', (ws) => {
     let clientRoomCode: string | null = null;
     let clientPlayerId: string | null = null;
+
+    // Send instant stats and public rooms list upon connecting
+    ws.send(JSON.stringify({
+      type: 'global_stats',
+      stats: getGlobalStats(),
+    }));
+    ws.send(JSON.stringify({
+      type: 'public_rooms_list',
+      rooms: getPublicRoomsSummary(),
+    }));
+    broadcastGlobalStats();
 
     function advanceToNextQuestion(room: ServerRoom) {
       if (room.autoNextTimer) {
@@ -897,7 +1000,17 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
         // CREATE ROOM
         if (type === 'create_room') {
-          const { hostName = 'Hôte', avatar = '👑', quizData, difficulty = 'medium', gameMode = 'quiz', gameStyle = 'competitive_room', durationPerQuestion = 20 } = data;
+          const {
+            hostName = 'Hôte',
+            avatar = '👑',
+            quizData,
+            difficulty = 'medium',
+            gameMode = 'quiz',
+            gameStyle = 'competitive_room',
+            durationPerQuestion = 20,
+            isPublic = true,
+            language = 'fr',
+          } = data;
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -929,10 +1042,12 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             difficulty,
             gameMode,
             gameStyle,
+            language: language || 'fr',
             durationPerQuestion: durationPerQuestion || 20,
             currentQuestionIndex: 0,
             questionStartTime: 0,
             quizData,
+            isPublic: isPublic !== false,
             players: new Map([[hostId, hostPlayer]]),
             createdAt: Date.now(),
           };
@@ -947,6 +1062,9 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             playerId: hostId,
             room: serializeRoom(newRoom),
           }));
+
+          broadcastGlobalStats();
+          broadcastPublicRooms();
         }
 
         // JOIN ROOM
@@ -1001,6 +1119,9 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             type: 'room_state',
             room: serializeRoom(room),
           });
+
+          broadcastGlobalStats();
+          broadcastPublicRooms();
         }
 
         // UPDATE QUIZ DATA (background generation finished)
@@ -1011,6 +1132,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           if (!room || !quizData) return;
 
           room.quizData = quizData;
+          if (quizData.gameMode) room.gameMode = quizData.gameMode;
+          if (quizData.difficulty) room.difficulty = quizData.difficulty;
           if (quizData.topic) room.topic = quizData.topic;
           if (quizData.themeTitle) room.themeTitle = quizData.themeTitle;
           if (quizData.themeBgImage) room.themeBgImage = quizData.themeBgImage;
@@ -1025,6 +1148,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             type: 'room_updated',
             room: serializeRoom(room),
           });
+          broadcastPublicRooms();
         }
 
         // START GAME
@@ -1271,13 +1395,24 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
         // RESTART WITH NEW QUIZ TOPIC
         else if (type === 'restart_with_quiz') {
-          const { code: rawCode, quizData } = data;
+          const { code: rawCode, quizData, gameMode, difficulty } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
           if (!room || clientPlayerId !== room.hostId) return;
 
+          const updatedGameMode = gameMode || quizData?.gameMode || room.gameMode;
+          if (updatedGameMode) {
+            room.gameMode = updatedGameMode;
+          }
+          if (difficulty || quizData?.difficulty) {
+            room.difficulty = difficulty || quizData.difficulty;
+          }
+
           if (quizData) {
-            room.quizData = quizData;
+            room.quizData = {
+              ...quizData,
+              gameMode: room.gameMode,
+            };
             room.topic = quizData.topic || room.topic;
             room.themeTitle = quizData.themeTitle || room.themeTitle;
             room.themeBgImage = quizData.themeBgImage || room.themeBgImage;
@@ -1303,6 +1438,72 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             type: 'room_state',
             room: serializeRoom(room),
           });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serializeRoom(room),
+          });
+          broadcastPublicRooms();
+        }
+
+        // UPDATE ROOM SETTINGS (mode, difficulty, duration, newQuizReady)
+        else if (type === 'update_room_settings') {
+          const { code: rawCode, gameMode, difficulty, durationPerQuestion, newQuizReady } = data;
+          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
+          const room = activeRooms.get(code);
+          if (!room || clientPlayerId !== room.hostId) return;
+
+          if (gameMode) {
+            room.gameMode = gameMode;
+            if (room.quizData) {
+              room.quizData.gameMode = gameMode;
+            }
+          }
+          if (difficulty) room.difficulty = difficulty;
+          if (durationPerQuestion) room.durationPerQuestion = durationPerQuestion;
+          if (typeof newQuizReady === 'boolean') room.newQuizReady = newQuizReady;
+
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serializeRoom(room),
+          });
+          broadcastToRoom(room, {
+            type: 'room_updated',
+            room: serializeRoom(room),
+          });
+          broadcastPublicRooms();
+        }
+
+        // TOGGLE PUBLIC ROOM
+        else if (type === 'toggle_public_room') {
+          const { code: rawCode, isPublic } = data;
+          const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
+          const room = activeRooms.get(code);
+          if (!room || clientPlayerId !== room.hostId) return;
+
+          room.isPublic = !!isPublic;
+          broadcastToRoom(room, {
+            type: 'room_state',
+            room: serializeRoom(room),
+          });
+          broadcastPublicRooms();
+          broadcastGlobalStats();
+        }
+
+        // GET PUBLIC ROOMS
+        else if (type === 'get_public_rooms') {
+          const { gameMode } = data;
+          ws.send(JSON.stringify({
+            type: 'public_rooms_list',
+            rooms: getPublicRoomsSummary(gameMode),
+          }));
+        }
+
+        // GET STATS
+        else if (type === 'get_stats') {
+          ws.send(JSON.stringify({
+            type: 'global_stats',
+            stats: getGlobalStats(),
+          }));
         }
 
         // LEAVE ROOM
@@ -1332,6 +1533,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           }
           clientRoomCode = null;
           clientPlayerId = null;
+          broadcastGlobalStats();
+          broadcastPublicRooms();
         }
       } catch (err) {
         console.error('WebSocket message parsing error:', err);
@@ -1352,6 +1555,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           });
         }
       }
+      broadcastGlobalStats();
+      broadcastPublicRooms();
     });
   });
 

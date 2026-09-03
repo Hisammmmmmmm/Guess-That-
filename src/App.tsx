@@ -30,12 +30,14 @@ import {
 import { PRESET_THEMES, PRESET_QUIZ_DATA } from './data/presetThemes';
 import { generateFallbackQuiz } from './data/fallbackGenerator';
 import { soundEngine } from './services/soundEngine';
+import { ttsService } from './services/ttsService';
 import { multiplayerService } from './services/multiplayerService';
 import { Navbar } from './components/Navbar';
 import { DynamicBackground } from './components/DynamicBackground';
 import { ThemeSelector } from './components/ThemeSelector';
 import { CircularCountdown } from './components/CircularCountdown';
 import { VisualClue } from './components/VisualClue';
+import { QuizBannerCard } from './components/QuizBannerCard';
 import { AudioCluePlayer } from './components/AudioCluePlayer';
 import { BlindTestMusicPlayer } from './components/BlindTestMusicPlayer';
 import { QuestionCard } from './components/QuestionCard';
@@ -293,8 +295,9 @@ export default function App() {
     const handleRoomUpdated = (data: any) => {
       if (!data?.room) return;
       setRoomState(data.room);
-      if (data.room.gameMode) {
-        setSettings((prev) => ({ ...prev, gameMode: data.room.gameMode }));
+      const newMode = data.room.gameMode || data.room.quizData?.gameMode;
+      if (newMode) {
+        setSettings((prev) => ({ ...prev, gameMode: newMode }));
       }
       if (data.room.difficulty) {
         setSettings((prev) => ({ ...prev, difficulty: data.room.difficulty }));
@@ -366,8 +369,9 @@ export default function App() {
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
       }
-      if (data.room?.gameMode) {
-        setSettings((prev) => ({ ...prev, gameMode: data.room.gameMode }));
+      const newMode = data.room?.gameMode || data.room?.quizData?.gameMode;
+      if (newMode) {
+        setSettings((prev) => ({ ...prev, gameMode: newMode }));
       }
       setCurrentQuestionIndex(data.room.currentQuestionIndex || 0);
       setSelectedOption(null);
@@ -382,7 +386,7 @@ export default function App() {
       setScreen('playing');
 
       soundEngine.playStartGame();
-      if (settings.musicEnabled && data.room.gameMode !== 'music_blind_test') {
+      if (settings.musicEnabled && newMode !== 'music_blind_test') {
         soundEngine.startAmbience(data.room.quizData?.ambientSound || 'synthwave');
       }
     };
@@ -419,6 +423,10 @@ export default function App() {
       setRoomState(data.room);
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
+      }
+      const newMode = data.room?.gameMode || data.room?.quizData?.gameMode;
+      if (newMode) {
+        setSettings((prev) => ({ ...prev, gameMode: newMode }));
       }
       setCurrentQuestionIndex(data.room.currentQuestionIndex);
       setSelectedOption(null);
@@ -548,19 +556,29 @@ export default function App() {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       const master = updated.masterVolume ?? 1.0;
+      const currentMode = updated.gameMode || 'quiz';
 
       if (newSettings.masterVolume !== undefined) {
         soundEngine.setMasterVolume(newSettings.masterVolume);
         if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.setVolume === 'function') {
           try {
             const menuVol = updated.menuMusicVolume ?? 0.1;
-            bgYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(menuVol * master * 100))));
+            const baseVol = Math.round(menuVol * master * 100);
+            let targetVol = baseVol;
+            if (screen === 'playing') {
+              if (currentMode === 'quiz') {
+                targetVol = Math.min(50, Math.max(5, Math.round(baseVol * 0.50)));
+              } else if (currentMode === 'visual_blind_test') {
+                targetVol = Math.min(40, Math.max(4, Math.round(baseVol * 0.20)));
+              }
+            }
+            bgYtPlayerRef.current.setVolume(targetVol);
           } catch {}
         }
         if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
           try {
             const baseQVol = updated.questionMusicVolume ?? 0.8;
-            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : 1.0;
+            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : (updated.gameMode === 'quiz' || updated.gameMode === 'visual_blind_test' ? 2.0 : 1.0);
             const qVol = Math.min(1.0, baseQVol * modeMultiplier);
             mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
           } catch {}
@@ -574,7 +592,16 @@ export default function App() {
         soundEngine.setMenuMusicVolume(menuVol);
         if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.setVolume === 'function') {
           try {
-            bgYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(menuVol * master * 100))));
+            const baseVol = Math.round(menuVol * master * 100);
+            let targetVol = baseVol;
+            if (screen === 'playing') {
+              if (currentMode === 'quiz') {
+                targetVol = Math.min(50, Math.max(5, Math.round(baseVol * 0.50)));
+              } else if (currentMode === 'visual_blind_test') {
+                targetVol = Math.min(40, Math.max(4, Math.round(baseVol * 0.20)));
+              }
+            }
+            bgYtPlayerRef.current.setVolume(targetVol);
           } catch {}
         }
       }
@@ -583,7 +610,7 @@ export default function App() {
         soundEngine.setQuestionMusicVolume(baseQVol);
         if (mainYtPlayerRef.current && typeof mainYtPlayerRef.current.setVolume === 'function') {
           try {
-            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : 1.0;
+            const modeMultiplier = updated.gameMode === 'music_blind_test' ? 1.2 : (updated.gameMode === 'quiz' || updated.gameMode === 'visual_blind_test' ? 2.0 : 1.0);
             const qVol = Math.min(1.0, baseQVol * modeMultiplier);
             mainYtPlayerRef.current.setVolume(Math.min(100, Math.max(0, Math.round(qVol * master * 100))));
           } catch {}
@@ -859,13 +886,35 @@ export default function App() {
     }
   };
 
-  // Active game mode resolved with priority: roomState (if in room/lobby/results/competitive_room) -> quizData -> settings
+  // Active game mode resolved with priority: roomState (if in room session) -> quizData -> settings
   const activeGameMode: GameMode = (
-    (roomState && (screen === 'room_lobby' || screen === 'room_results' || settings.gameStyle === 'competitive_room') ? roomState.gameMode : undefined) ||
+    roomState?.gameMode ||
     quizData?.gameMode ||
     settings.gameMode ||
     'quiz'
   ) as GameMode;
+
+  // Dynamic synchronization of YouTube player volume across game modes and screens
+  // Ensures volume is doubled in Quiz and Visual Blind Test modes
+  useEffect(() => {
+    if (bgYtPlayerRef.current && typeof bgYtPlayerRef.current.setVolume === 'function') {
+      try {
+        const master = settings.masterVolume ?? 1.0;
+        const menuVol = Math.round((settings.menuMusicVolume ?? settings.musicVolume ?? 0.1) * master * 100);
+        let targetVol = menuVol;
+        if (screen === 'playing') {
+          if (activeGameMode === 'quiz') {
+            // Volume YouTube doublé en mode Quiz (passé de 25% à 50%)
+            targetVol = Math.min(50, Math.max(5, Math.round(menuVol * 0.50)));
+          } else if (activeGameMode === 'visual_blind_test') {
+            // Volume YouTube doublé en mode Blind Test Visuel (passé de 10% à 20%)
+            targetVol = Math.min(40, Math.max(4, Math.round(menuVol * 0.20)));
+          }
+        }
+        bgYtPlayerRef.current.setVolume(targetVol);
+      } catch {}
+    }
+  }, [screen, activeGameMode, settings.menuMusicVolume, settings.musicVolume, settings.masterVolume, settings.musicEnabled]);
 
   // --- QUESTION & TIMER LIFECYCLE ---
   const currentQuestion: Question | undefined = quizData?.questions[currentQuestionIndex];
@@ -1032,6 +1081,33 @@ export default function App() {
       }
     }
   }, [screen, currentQuestionIndex, currentQuestion?.id, isAnswered, settings.speechCluesEnabled, activeGameMode]);
+
+  // Handle global TTS stop requests (e.g. user manually clicked vocal clue button)
+  useEffect(() => {
+    const handleStopTts = () => {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
+    };
+    window.addEventListener('app:stop-tts', handleStopTts);
+    return () => {
+      window.removeEventListener('app:stop-tts', handleStopTts);
+    };
+  }, []);
+
+  // Stop vocal clue when question is answered or leaving game
+  useEffect(() => {
+    if (isAnswered || screen !== 'playing') {
+      try {
+        ttsService.stop();
+      } catch {}
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
+    }
+  }, [isAnswered, screen]);
 
   // Volume synchronization
   useEffect(() => {
@@ -1328,7 +1404,7 @@ export default function App() {
       className={`w-full text-slate-100 font-sans selection:bg-purple-500 selection:text-white flex flex-col justify-between ${
         screen === 'playing'
           ? 'h-[100dvh] max-h-[100dvh] overflow-hidden'
-          : 'min-h-[100dvh] max-h-[100dvh] sm:min-h-screen sm:max-h-none overflow-hidden sm:overflow-y-auto pt-12 sm:pt-16'
+          : 'min-h-[100dvh] overflow-x-hidden overflow-y-auto pt-12 sm:pt-16'
       }`}
       style={{ backgroundColor: '#0B0716' }}
     >
@@ -1412,9 +1488,11 @@ export default function App() {
               let targetVol = baseVol;
               if (screen === 'playing') {
                 if (activeGameMode === 'quiz') {
-                  targetVol = Math.min(25, baseVol * 0.25);
+                  // Volume doublé dans le mode Quiz (passé de 25% à 50%)
+                  targetVol = Math.min(50, Math.max(5, Math.round(baseVol * 0.50)));
                 } else if (activeGameMode === 'visual_blind_test') {
-                  targetVol = Math.max(1, Math.round(baseVol * 0.10)); // Reduced to 10% in visual blind test
+                  // Volume doublé dans le mode Blind Test Visuel (passé de 10% à 20%)
+                  targetVol = Math.min(40, Math.max(4, Math.round(baseVol * 0.20)));
                 }
               }
               // Start immediately at 35% of target volume so audio is heard right away without delay
@@ -1543,17 +1621,17 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md p-8 rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl text-center shadow-2xl flex flex-col items-center gap-6"
+              className="w-full max-w-md p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl text-center shadow-2xl flex flex-col items-center gap-4 sm:gap-6 my-auto"
             >
-              <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                <Wand2 className="w-10 h-10 text-emerald-400" />
+              <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                <Wand2 className="w-7 h-7 sm:w-10 sm:h-10 text-emerald-400" />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <h3 className="text-2xl font-black text-white font-heading">
+              <div className="flex flex-col gap-1 sm:gap-2">
+                <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
                   {t('generation_done', settings.language)}
                 </h3>
-                <p className="text-sm text-white/70">
+                <p className="text-xs sm:text-sm text-white/70">
                   {t("quiz_ready", settings.language).replace("%s", pendingQuizData.themeTitle || pendingQuizData.topic)}
                 </p>
               </div>
@@ -1564,9 +1642,9 @@ export default function App() {
                   onClick={() => {
                     handleCreateRoom(pendingQuizData);
                   }}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold tracking-wider shadow-lg transform hover:-translate-y-0.5 transition-all active:scale-95 border border-purple-400/50 flex items-center justify-center gap-2"
+                  className="w-full py-3 sm:py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold tracking-wider shadow-lg transform hover:-translate-y-0.5 transition-all active:scale-95 border border-purple-400/50 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Sparkles className="w-5 h-5 text-yellow-300" />
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" />
                   {t('create_room', settings.language)}
                 </button>
               ) : (
@@ -1575,7 +1653,7 @@ export default function App() {
                   onClick={() => {
                     startQuiz(pendingQuizData);
                   }}
-                  className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold tracking-wider shadow-lg transform hover:-translate-y-1 transition-all active:scale-95 border border-purple-400/50"
+                  className="w-full py-2.5 sm:py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold tracking-wider shadow-lg transform hover:-translate-y-1 transition-all active:scale-95 border border-purple-400/50 cursor-pointer"
                 >
                   {t('start_game', settings.language)}
                 </button>
@@ -1617,12 +1695,12 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md p-6 sm:p-8 rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl text-center shadow-2xl flex flex-col items-center gap-5"
+              className="w-full max-w-md p-4 sm:p-8 rounded-2xl sm:rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl text-center shadow-2xl flex flex-col items-center gap-3 sm:gap-5 max-h-[92dvh] overflow-y-auto my-auto"
             >
               {/* Spinning enlarged game logo with glowing backdrop */}
-              <div className="relative my-1">
+              <div className="relative my-0.5 sm:my-1">
                 <div className="absolute inset-0 rounded-full bg-purple-500/20 blur-xl animate-pulse scale-110" />
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center p-3 shadow-xl shadow-purple-500/20">
+                <div className="w-16 h-16 sm:w-28 sm:h-28 rounded-2xl sm:rounded-3xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center p-2 sm:p-3 shadow-xl shadow-purple-500/20">
                   <img 
                     src="/logo5.png" 
                     alt="GuessThat!" 
@@ -1630,35 +1708,35 @@ export default function App() {
                     style={{ animationDuration: '6s' }}
                   />
                 </div>
-                <div className="absolute inset-0 rounded-3xl bg-purple-500/10 animate-ping opacity-40 pointer-events-none" />
+                <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-purple-500/10 animate-ping opacity-40 pointer-events-none" />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <h3 className="text-2xl font-black text-white font-heading">
+              <div className="flex flex-col gap-0.5 sm:gap-1">
+                <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
                   {t('ai_generation_in_progress', settings.language)}
                 </h3>
               </div>
 
               {/* Informational Coffee Break Box - Placed above loading info */}
-              <div className="w-full flex flex-col items-center gap-2 text-xs text-white/70 bg-white/5 p-4 rounded-2xl border border-white/10 shadow-inner">
-                <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-0.5">
-                  <Coffee className="w-5 h-5 text-amber-300" />
+              <div className="w-full flex flex-col items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-white/70 bg-white/5 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/10 shadow-inner">
+                <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-0.5">
+                  <Coffee className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
                 </div>
-                <p className="text-sm font-bold text-white">
+                <p className="text-xs sm:text-sm font-bold text-white">
                   {t('take_a_coffee', settings.language)}
                 </p>
-                <p className="leading-relaxed text-white/60">
+                <p className="leading-relaxed text-white/60 text-[10px] sm:text-xs">
                   {t('coffee_break_desc', settings.language)}
                 </p>
               </div>
 
               {/* Dynamic Step Loading Information & Progress Bar */}
-              <div className="w-full flex flex-col items-center gap-2 pt-1">
+              <div className="w-full flex flex-col items-center gap-1.5 sm:gap-2 pt-0.5 sm:pt-1">
                 <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
                   <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-                  <p className="animate-pulse">{generationStep}</p>
+                  <p className="animate-pulse text-xs sm:text-sm">{generationStep}</p>
                 </div>
-                <div className="w-full bg-black/40 h-2 rounded-full overflow-hidden border border-white/10 p-0.5 mt-1">
+                <div className="w-full bg-black/40 h-2 rounded-full overflow-hidden border border-white/10 p-0.5 mt-0.5 sm:mt-1">
                   <div className="bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 h-full rounded-full animate-pulse w-3/4 shadow-[0_0_15px_rgba(168,85,247,0.8)]" />
                 </div>
               </div>
@@ -1818,14 +1896,25 @@ export default function App() {
                             questionMusicVolume={settings.questionMusicVolume}
                             onPlayClickSound={() => soundEngine.playClick()}
                           />
+                        ) : activeGameMode === 'quiz' ? (
+                          <QuizBannerCard
+                            title={quizData.themeTitle || quizData.topic}
+                            category={currentQuestion.category}
+                            questionIndex={currentQuestionIndex}
+                            totalQuestions={quizData.questions.length}
+                            primaryColor={quizData.primaryColor}
+                            accentColor={quizData.accentColor}
+                            isAnswered={isAnswered}
+                            language={roomState?.language || settings.language}
+                          />
                         ) : (
                           <VisualClue
                             language={roomState?.language || settings.language}
-                            imageUrl={activeGameMode === 'quiz' ? (quizData.themeBgImage || currentQuestion.imageUrl) : currentQuestion.imageUrl}
-                            secondaryImageUrl={activeGameMode === 'quiz' ? undefined : currentQuestion.secondaryImageUrl}
-                            secondaryImageSource={activeGameMode === 'quiz' ? 'Wikipedia' : currentQuestion.secondaryImageSource}
-                            imagePrompt={activeGameMode === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.imagePrompt}
-                            category={activeGameMode === 'quiz' ? (quizData.themeTitle || quizData.topic) : currentQuestion.category}
+                            imageUrl={currentQuestion.imageUrl || ''}
+                            secondaryImageUrl={currentQuestion.secondaryImageUrl}
+                            secondaryImageSource={currentQuestion.secondaryImageSource}
+                            imagePrompt={currentQuestion.imagePrompt}
+                            category={currentQuestion.category}
                             clue=""
                             isAnswered={isAnswered}
                             questionIndex={currentQuestionIndex}
@@ -2004,6 +2093,8 @@ export default function App() {
           setIsPublicRoomsModalOpen(true);
         }}
         initialCode={joinModalInitialCode}
+        defaultPlayerName={profileName}
+        defaultAvatar={profileAvatar}
         isJoining={isJoiningRoom}
         errorMessage={joinErrorMessage}
       />

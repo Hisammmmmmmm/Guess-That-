@@ -208,12 +208,12 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
   const currentModeInfo = modesConfig.find((m) => m.id === selectedMode) || modesConfig[0];
 
   return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col gap-8 py-4 px-3 sm:px-6" id="multiplayer-results-view">
+    <div className="w-full max-w-4xl mx-auto flex flex-col gap-4 sm:gap-8 py-2 sm:py-4 px-2 sm:px-6" id="multiplayer-results-view">
       {/* Top Banner & Podium */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 bg-white/5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl text-center flex flex-col items-center gap-6 overflow-hidden"
+        className="relative rounded-2xl sm:rounded-[36px] p-3.5 xs:p-5 sm:p-8 bg-white/5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl text-center flex flex-col items-center gap-3 sm:gap-6 overflow-hidden"
       >
         {/* Glow */}
         <div
@@ -223,38 +223,38 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
 
         {/* Title */}
         <div>
-          <span className="px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
+          <span className="px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40">
             {t('final_podium', language)}
           </span>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-3">
+          <h2 className="text-xl sm:text-4xl font-extrabold text-white font-heading mt-2 sm:mt-3">
             {roomState.themeTitle || roomState.topic}
           </h2>
-          <p className="text-xs sm:text-sm text-white/60 mt-1">
+          <p className="text-[11px] sm:text-sm text-white/60 mt-0.5 sm:mt-1">
             {t('multiplayer_ended_participants', language).replace('%s', String(playersList.length))}
           </p>
         </div>
 
         {/* 3D Animated Podium */}
-        <div className="flex items-end justify-center gap-3 sm:gap-6 w-full max-w-lg mt-4 px-2">
+        <div className="flex items-end justify-center gap-2 sm:gap-6 w-full max-w-lg mt-2 sm:mt-4 px-1">
           {/* 2nd Place (Silver) */}
           {secondPlace && (
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="flex-1 flex flex-col items-center"
+              className="flex-1 flex flex-col items-center min-w-0"
             >
-              <span className="text-3xl mb-1">{secondPlace.avatar || '🥈'}</span>
-              <span className="font-bold text-xs sm:text-sm text-white truncate max-w-[90px]">
+              <span className="text-2xl xs:text-3xl sm:text-4xl mb-0.5 sm:mb-1">{secondPlace.avatar || '🥈'}</span>
+              <span className="font-bold text-[11px] xs:text-xs sm:text-sm text-white truncate max-w-[75px] xs:max-w-[90px]">
                 {secondPlace.name}
               </span>
-              <span className="text-xs font-black text-slate-300 mb-2">
+              <span className="text-[10px] sm:text-xs font-black text-slate-300 mb-1 sm:mb-2">
                 {secondPlace.score.toLocaleString()} pts
               </span>
 
-              <div className="w-full h-24 sm:h-28 rounded-t-2xl bg-gradient-to-t from-slate-700/80 to-slate-500/80 border-t border-x border-slate-400/50 flex flex-col items-center justify-start pt-2 shadow-lg backdrop-blur-md">
-                <span className="text-2xl sm:text-3xl font-black text-slate-200">2</span>
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-300">{t('silver', language)}</span>
+              <div className="w-full h-16 xs:h-20 sm:h-28 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-t from-slate-700/80 to-slate-500/80 border-t border-x border-slate-400/50 flex flex-col items-center justify-start pt-1.5 sm:pt-2 shadow-lg backdrop-blur-md">
+                <span className="text-xl sm:text-3xl font-black text-slate-200">2</span>
+                <span className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-slate-300">{t('silver', language)}</span>
               </div>
             </motion.div>
           )}
@@ -265,20 +265,20 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="flex-1 flex flex-col items-center relative z-10"
+              className="flex-1 flex flex-col items-center relative z-10 min-w-0"
             >
-              <Crown className="w-6 h-6 text-amber-400 animate-bounce mb-1" />
-              <span className="text-4xl sm:text-5xl mb-1">{firstPlace.avatar || '👑'}</span>
-              <span className="font-black text-sm sm:text-base text-yellow-300 truncate max-w-[110px]">
+              <Crown className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400 animate-bounce mb-0.5 sm:mb-1" />
+              <span className="text-3xl xs:text-4xl sm:text-5xl mb-0.5 sm:mb-1">{firstPlace.avatar || '👑'}</span>
+              <span className="font-black text-xs xs:text-sm sm:text-base text-yellow-300 truncate max-w-[90px] xs:max-w-[110px]">
                 {firstPlace.name}
               </span>
-              <span className="text-xs sm:text-sm font-black text-amber-400 mb-2">
+              <span className="text-[11px] sm:text-sm font-black text-amber-400 mb-1 sm:mb-2">
                 {firstPlace.score.toLocaleString()} pts
               </span>
 
-              <div className="w-full h-32 sm:h-40 rounded-t-2xl bg-gradient-to-t from-amber-600/90 to-yellow-500/90 border-t border-x border-yellow-300/60 flex flex-col items-center justify-start pt-3 shadow-[0_0_30px_rgba(245,158,11,0.4)] backdrop-blur-md">
-                <span className="text-3xl sm:text-4xl font-black text-white">1</span>
-                <span className="text-[10px] uppercase tracking-wider font-black text-yellow-100">{t('champion', language)}</span>
+              <div className="w-full h-24 xs:h-30 sm:h-40 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-t from-amber-600/90 to-yellow-500/90 border-t border-x border-yellow-300/60 flex flex-col items-center justify-start pt-2 sm:pt-3 shadow-[0_0_30px_rgba(245,158,11,0.4)] backdrop-blur-md">
+                <span className="text-2xl sm:text-4xl font-black text-white">1</span>
+                <span className="text-[9px] sm:text-[10px] uppercase tracking-wider font-black text-yellow-100">{t('champion', language)}</span>
               </div>
             </motion.div>
           )}
@@ -289,29 +289,29 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="flex-1 flex flex-col items-center"
+              className="flex-1 flex flex-col items-center min-w-0"
             >
-              <span className="text-3xl mb-1">{thirdPlace.avatar || '🥉'}</span>
-              <span className="font-bold text-xs sm:text-sm text-white truncate max-w-[90px]">
+              <span className="text-2xl xs:text-3xl sm:text-4xl mb-0.5 sm:mb-1">{thirdPlace.avatar || '🥉'}</span>
+              <span className="font-bold text-[11px] xs:text-xs sm:text-sm text-white truncate max-w-[75px] xs:max-w-[90px]">
                 {thirdPlace.name}
               </span>
-              <span className="text-xs font-black text-amber-600 mb-2">
+              <span className="text-[10px] sm:text-xs font-black text-amber-600 mb-1 sm:mb-2">
                 {thirdPlace.score.toLocaleString()} pts
               </span>
 
-              <div className="w-full h-16 sm:h-20 rounded-t-2xl bg-gradient-to-t from-amber-900/80 to-amber-700/80 border-t border-x border-amber-600/50 flex flex-col items-center justify-start pt-2 shadow-lg backdrop-blur-md">
-                <span className="text-2xl sm:text-3xl font-black text-amber-200">3</span>
-                <span className="text-[10px] uppercase tracking-wider font-bold text-amber-300">{t('bronze', language)}</span>
+              <div className="w-full h-12 xs:h-16 sm:h-20 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-t from-amber-900/80 to-amber-700/80 border-t border-x border-amber-600/50 flex flex-col items-center justify-start pt-1.5 sm:pt-2 shadow-lg backdrop-blur-md">
+                <span className="text-xl sm:text-3xl font-black text-amber-200">3</span>
+                <span className="text-[9px] sm:text-[10px] uppercase tracking-wider font-bold text-amber-300">{t('bronze', language)}</span>
               </div>
             </motion.div>
           )}
         </div>
 
         {/* Action / New Topic or Guest Waiting */}
-        <div className="flex flex-col items-center justify-center w-full max-w-2xl pt-4 gap-4">
+        <div className="flex flex-col items-center justify-center w-full max-w-2xl pt-2 sm:pt-4 gap-3 sm:gap-4">
           {roomState.newQuizReady ? (
-            <div className="flex flex-col gap-3 w-full p-5 bg-purple-900/40 border border-purple-500/40 rounded-3xl backdrop-blur-xl shadow-xl">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex flex-col gap-2.5 sm:gap-3 w-full p-3.5 sm:p-5 bg-purple-900/40 border border-purple-500/40 rounded-2xl sm:rounded-3xl backdrop-blur-xl shadow-xl">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
                 <div className="flex items-center gap-2">
                   <div className={`p-1.5 rounded-lg border ${currentModeInfo.activeBorder} ${currentModeInfo.activeBg}`}>
                     {currentModeInfo.icon}
@@ -325,15 +325,15 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 text-xs font-bold">
-                  <Sparkles className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 text-[11px] sm:text-xs font-bold">
+                  <Sparkles className="w-3 h-3 text-yellow-300" />
                   <span>{roomState.quizData?.questions?.length || 10} questions</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-2 text-yellow-300 font-bold text-sm sm:text-base text-center py-1">
-                <Sparkles className="w-4 h-4 shrink-0 text-yellow-400" />
-                <span>{t('new_topic_loaded', language).replace('%s', roomState.themeTitle || roomState.topic)}</span>
+              <div className="flex items-center justify-center gap-2 text-yellow-300 font-bold text-xs sm:text-base text-center py-1">
+                <Sparkles className="w-3.5 h-3.5 shrink-0 text-yellow-400" />
+                <span className="line-clamp-2">{t('new_topic_loaded', language).replace('%s', roomState.themeTitle || roomState.topic)}</span>
               </div>
 
               {isHost ? (
@@ -344,9 +344,9 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                       multiplayerService.startGame(roomState.code);
                     }}
                     id="btn-start-new-multiplayer-game"
-                    className="w-full py-3.5 rounded-xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 shadow-[0_0_25px_rgba(168,85,247,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
+                    className="w-full py-3 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 shadow-[0_0_25px_rgba(168,85,247,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
                   >
-                    <ArrowRight className="w-5 h-5" />
+                    <ArrowRight className="w-4 h-4" />
                     <span>{t('launch_game_players', language).replace('%s', String(playersList.length))}</span>
                   </button>
                   <button
@@ -355,6 +355,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                       multiplayerService.updateRoomSettings({
                         code: roomState.code,
                         gameMode: selectedMode,
+                        newQuizReady: false,
                       });
                       // Allow re-generating another topic
                       setNewTopicInput('');
@@ -372,21 +373,21 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               )}
             </div>
           ) : isHost ? (
-            <div className="flex flex-col gap-4 w-full p-4 sm:p-5 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl shadow-xl">
+            <div className="flex flex-col gap-3 sm:gap-4 w-full p-3 sm:p-5 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl backdrop-blur-xl shadow-xl">
               {/* Host Mode Selection */}
-              <div className="flex flex-col gap-2 text-left w-full">
+              <div className="flex flex-col gap-1.5 text-left w-full">
                 <div className="flex items-center justify-between">
                   <span className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                     {t('change_mode_prompt', language)}
                   </span>
-                  <span className="text-[11px] font-medium text-purple-300 bg-purple-900/40 border border-purple-500/30 px-2.5 py-0.5 rounded-full">
-                    👑 Hôte du salon
+                  <span className="text-[10px] sm:text-[11px] font-medium text-purple-300 bg-purple-900/40 border border-purple-500/30 px-2 sm:px-2.5 py-0.5 rounded-full">
+                    👑 Hôte
                   </span>
                 </div>
 
-                {/* 3 Interactive Mode Tabs */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full pt-1" id="host-game-mode-selector">
+                {/* 3 Interactive Mode Tabs - Compact Responsive Grid */}
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full pt-1" id="host-game-mode-selector">
                   {modesConfig.map((mode) => {
                     const isSelected = selectedMode === mode.id;
                     return (
@@ -396,26 +397,26 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                         onClick={() => handleSelectMode(mode.id)}
                         id={`btn-mode-select-${mode.id}`}
                         disabled={isGenerating}
-                        className={`relative p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col gap-1.5 ${
+                        className={`relative p-2 sm:p-3 rounded-xl sm:rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col gap-1 sm:gap-1.5 ${
                           isSelected
                             ? `${mode.activeBorder} ${mode.activeBg} ring-2 ring-purple-400/40 bg-gradient-to-b from-white/15 to-white/5`
                             : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 opacity-75 hover:opacity-100'
                         }`}
                       >
                         <div className="flex items-center justify-between w-full">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
                             {mode.icon}
-                            <span className="text-xs sm:text-sm font-extrabold text-white">
+                            <span className="text-[11px] xs:text-xs sm:text-sm font-extrabold text-white truncate">
                               {mode.title}
                             </span>
                           </div>
                           {isSelected && (
-                            <div className="w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center text-white shadow-sm">
-                              <Check className="w-3 h-3 stroke-[3]" />
+                            <div className="w-3.5 h-3.5 rounded-full bg-purple-500 flex items-center justify-center text-white shadow-sm shrink-0">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
                             </div>
                           )}
                         </div>
-                        <span className="text-[10px] text-white/60 line-clamp-1">
+                        <span className="hidden sm:block text-[10px] text-white/60 line-clamp-1">
                           {mode.subtitle}
                         </span>
                       </button>
@@ -424,8 +425,8 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                 </div>
               </div>
 
-              {/* Dynamic Suggestions for selected mode */}
-              <div className="flex flex-col gap-1.5 text-left w-full">
+              {/* Dynamic Suggestions for selected mode (Hidden on vertical smartphone resolution) */}
+              <div className="hidden sm:flex flex-col gap-1.5 text-left w-full">
                 <span className="text-[11px] font-bold text-white/60 uppercase tracking-wider flex items-center gap-1">
                   {t('quick_suggestions', language)}
                 </span>
@@ -450,19 +451,19 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
 
               {/* Custom Topic Input & Generate Button */}
               <div className="flex flex-col gap-2 w-full pt-1">
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 sm:gap-2">
                   <input
                     type="text"
                     value={newTopicInput}
                     onChange={(e) => setNewTopicInput(e.target.value)}
                     placeholder={
                       selectedMode === 'music_blind_test'
-                        ? 'Sujet musical (ex: Rock 80s, Anime OST, Pop...)'
+                        ? 'Sujet musical (ex: Rock 80s, Anime, Pop...)'
                         : selectedMode === 'visual_blind_test'
-                        ? 'Sujet visuel (ex: Monuments, Logos, Animaux...)'
+                        ? 'Sujet visuel (ex: Logos, Animaux...)'
                         : t('new_topic_placeholder', language)
                     }
-                    className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50"
+                    className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/50"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && newTopicInput.trim() && !isGenerating) {
                         handleGenerateNewQuiz();
@@ -473,17 +474,17 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                     onClick={() => handleGenerateNewQuiz()}
                     disabled={isGenerating || !newTopicInput.trim()}
                     id="btn-generate-new-quiz"
-                    className="px-5 py-3 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg cursor-pointer shrink-0"
+                    className="px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl font-extrabold text-xs sm:text-sm text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 transition-all flex items-center justify-center gap-1.5 sm:gap-2 disabled:opacity-50 shadow-lg cursor-pointer shrink-0"
                   >
                     {isGenerating ? (
                       <span className="animate-spin">⏳</span>
                     ) : (
-                      <Sparkles className="w-4 h-4 text-yellow-300" />
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-300" />
                     )}
                     <span>{isGenerating ? t('loading', language) : t('generate_action', language)}</span>
                   </button>
                 </div>
-                <span className="text-[11px] text-white/50 text-center">
+                <span className="text-[10px] sm:text-[11px] text-white/50 text-center">
                   {t('host_change_mode_hint', language)}
                 </span>
               </div>
@@ -509,7 +510,7 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-center gap-3 w-full pt-2">
+          <div className="flex flex-row items-center justify-center gap-2 sm:gap-3 w-full pt-1 sm:pt-2">
             <button
               onClick={() => {
                 onPlayClickSound?.();
@@ -517,19 +518,19 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
                 else if (onExitToMenu) onExitToMenu();
               }}
               id="btn-new-theme-room"
-              className="flex-1 min-w-[140px] px-5 py-3 rounded-2xl font-bold text-xs uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
+              className="flex-1 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-bold text-[11px] sm:text-xs uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer backdrop-blur-md"
             >
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              <span>{t('new_room_btn', language)}</span>
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 shrink-0" />
+              <span className="truncate">{t('new_room_btn', language)}</span>
             </button>
 
             <button
               onClick={handleShare}
               id="btn-share-multiplayer"
-              className="flex-1 min-w-[140px] px-5 py-3 rounded-2xl font-bold text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
+              className="flex-1 px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-bold text-[11px] sm:text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer backdrop-blur-md"
             >
-              <Share2 className="w-4 h-4 text-purple-400" />
-              <span>{copied ? t('results_copied', language) : t('share_result', language)}</span>
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+              <span className="truncate">{copied ? t('results_copied', language) : t('share_result', language)}</span>
             </button>
           </div>
         </div>

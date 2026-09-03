@@ -241,6 +241,7 @@ class MultiplayerService {
     gameMode?: string;
     difficulty?: string;
     durationPerQuestion?: number;
+    newQuizReady?: boolean;
   }) {
     const targetCode = params.code || this.currentRoomCode;
     if (targetCode) {

@@ -104,12 +104,12 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto flex flex-col gap-8 py-4 px-2 sm:px-4" id="results-view">
+    <div className="w-full max-w-4xl mx-auto flex flex-col gap-4 sm:gap-8 py-2 sm:py-4 px-2 sm:px-4" id="results-view">
       {/* Top Banner Card */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative rounded-[32px] sm:rounded-[36px] p-6 sm:p-8 bg-white/5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl text-center flex flex-col items-center gap-6 overflow-hidden"
+        className="relative rounded-2xl sm:rounded-[36px] p-4 xs:p-5 sm:p-8 bg-white/5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl text-center flex flex-col items-center gap-4 sm:gap-6 overflow-hidden"
       >
         {/* Glow Halo */}
         <div
@@ -120,13 +120,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         {gameStyle === 'slideshow' ? (
           <>
             <div>
-              <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
+              <span className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
                 {t('end_of_slideshow', language)}
               </span>
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-4">
+              <h2 className="text-xl sm:text-4xl font-extrabold text-white font-heading mt-2 sm:mt-4">
                 {t('thank_you_attention', language)}
               </h2>
-              <p className="text-sm text-white/60 mt-3 max-w-md mx-auto">
+              <p className="text-xs sm:text-sm text-white/60 mt-1 sm:mt-3 max-w-md mx-auto">
                 {t('presentation_ended', language).replace('%s', quizData.themeTitle || quizData.topic)}
               </p>
             </div>
@@ -136,13 +136,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             {/* Rank Circle Emblem */}
             <div className="relative">
               <div
-                className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-gradient-to-br ${rankColor} p-1 shadow-2xl flex items-center justify-center transform rotate-3 hover:rotate-0 transition-transform`}
+                className={`w-20 h-20 sm:w-32 sm:h-32 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${rankColor} p-0.5 sm:p-1 shadow-2xl flex items-center justify-center transform rotate-3 hover:rotate-0 transition-transform`}
               >
-                <div className="w-full h-full bg-[#0F0A1F] rounded-[22px] flex flex-col items-center justify-center">
-                  <span className={`text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br ${rankColor} font-heading`}>
+                <div className="w-full h-full bg-[#0F0A1F] rounded-[14px] sm:rounded-[22px] flex flex-col items-center justify-center">
+                  <span className={`text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br ${rankColor} font-heading`}>
                     {rank}
                   </span>
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/50 -mt-1">
+                  <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-white/50 -mt-0.5 sm:-mt-1">
                     {t('rank_label', language)}
                   </span>
                 </div>
@@ -150,59 +150,59 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             </div>
 
             <div>
-              <span className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
+              <span className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-extrabold uppercase tracking-wider border ${rankBadgeBg}`}>
                 {rankTitle}
               </span>
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-heading mt-3">
+              <h2 className="text-xl sm:text-4xl font-extrabold text-white font-heading mt-2 sm:mt-3">
                 {t('final_score', language)} <span className="text-yellow-400">{stats.score.toLocaleString()} pts</span>
               </h2>
-              <p className="text-xs sm:text-sm text-white/60 mt-1">
+              <p className="text-[11px] sm:text-sm text-white/60 mt-0.5 sm:mt-1">
                 Blind Test : {quizData.themeTitle}
               </p>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl mt-1">
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-1" />
-                <span className="text-xl font-black text-white">{correct} / {total}</span>
-                <span className="text-[11px] text-white/60 font-semibold">{t('correct_answers', language)}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 w-full max-w-2xl mt-0.5 sm:mt-1">
+              <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 mb-0.5 sm:mb-1" />
+                <span className="text-base sm:text-xl font-black text-white">{correct} / {total}</span>
+                <span className="text-[10px] sm:text-[11px] text-white/60 font-semibold">{t('correct_answers', language)}</span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
-                <Award className="w-5 h-5 text-purple-400 mb-1" />
-                <span className="text-xl font-black text-white">{accuracyPct}%</span>
-                <span className="text-[11px] text-white/60 font-semibold">{t('overall_accuracy', language)}</span>
+              <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Award className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 mb-0.5 sm:mb-1" />
+                <span className="text-base sm:text-xl font-black text-white">{accuracyPct}%</span>
+                <span className="text-[10px] sm:text-[11px] text-white/60 font-semibold">{t('overall_accuracy', language)}</span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
-                <Flame className="w-5 h-5 text-orange-400 mb-1" />
-                <span className="text-xl font-black text-white">{stats.maxStreak} max</span>
-                <span className="text-[11px] text-white/60 font-semibold">{t('max_streak', language)}</span>
+              <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 mb-0.5 sm:mb-1" />
+                <span className="text-base sm:text-xl font-black text-white">{stats.maxStreak} max</span>
+                <span className="text-[10px] sm:text-[11px] text-white/60 font-semibold">{t('max_streak', language)}</span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
-                <Clock className="w-5 h-5 text-pink-400 mb-1" />
-                <span className="text-xl font-black text-white">
+              <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center backdrop-blur-md shadow-md">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-pink-400 mb-0.5 sm:mb-1" />
+                <span className="text-base sm:text-xl font-black text-white">
                   {Math.round(stats.totalTimeSpent / Math.max(1, stats.answers.length))}s
                 </span>
-                <span className="text-[11px] text-white/60 font-semibold">{t('avg_time_per_q', language)}</span>
+                <span className="text-[10px] sm:text-[11px] text-white/60 font-semibold">{t('avg_time_per_q', language)}</span>
               </div>
             </div>
           </>
         )}
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-3 w-full max-w-md pt-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 w-full max-w-md pt-1 sm:pt-2">
           <button
             onClick={() => {
               onPlayClickSound?.();
               onReplay();
             }}
             id="btn-replay-quiz"
-            className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(168,85,247,0.5)] cursor-pointer transform active:scale-95 hover:scale-[1.02]"
+            className="flex-1 min-w-[120px] px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-[0_0_30px_rgba(168,85,247,0.5)] cursor-pointer transform active:scale-95 hover:scale-[1.02]"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>{t('replay', language)}</span>
           </button>
 
@@ -212,9 +212,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               onNewTheme();
             }}
             id="btn-new-theme"
-            className="flex-1 min-w-[140px] px-6 py-3.5 rounded-2xl font-black text-sm uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-95 hover:scale-[1.02] backdrop-blur-md"
+            className="flex-1 min-w-[120px] px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider text-white/90 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer transform active:scale-95 hover:scale-[1.02] backdrop-blur-md"
           >
-            <Sparkles className="w-4 h-4 text-yellow-400" />
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400" />
             <span>{t('other_theme', language)}</span>
           </button>
 
@@ -222,9 +222,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             <button
               onClick={handleShare}
               id="btn-share-score"
-              className="w-full sm:w-auto px-5 py-3 rounded-2xl font-bold text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md"
+              className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-bold text-xs text-white/80 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer backdrop-blur-md"
             >
-              <Share2 className="w-4 h-4 text-purple-400" />
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
               <span>{copied ? t('score_copied', language) : t('share_result', language)}</span>
             </button>
           )}

@@ -332,7 +332,17 @@ export const translations: Record<string, string> = {
   "private_room_badge": "Privé",
   "public_room_toggle_desc": "Ce salon est visible par tous les joueurs dans la liste des salons publics.",
   "private_room_toggle_desc": "Ce salon est accessible uniquement via le code ou le lien d'invitation.",
-  "retry_ai_generation": "Réessayer la génération IA"
+  "retry_ai_generation": "Réessayer la génération IA",
+  "online_players_label": "Joueurs en ligne",
+  "active_rooms_label": "Salons actifs",
+  "total_quizzes_label": "Quiz générés",
+  "public_room_visibility": "Visibilité du salon",
+  "listen_attentively": "Écoutez attentivement l'indice sonore",
+  "listen_sound_voice_clue": "Écouter l'indice sonore & vocal",
+  "music_playing": "Piste audio en cours de lecture",
+  "click_to_listen": "Cliquer pour écouter",
+  "revealed_track": "Piste révélée",
+  "click_to_play": "Cliquer pour lancer"
 };
 
 export function t(key: string, _lang?: string): string {

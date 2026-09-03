@@ -225,8 +225,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       {/* Main Compact Bento Grid (QR Code on Left, Room info & Players on Right) */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-stretch">
         
-        {/* Left Column: QR Code + Room Code Card (Col 1-5) */}
-        <div className="md:col-span-5 bg-black/40 border border-white/15 rounded-2xl sm:rounded-3xl p-3 sm:p-4 backdrop-blur-xl flex flex-col items-center justify-between gap-3 shadow-xl relative overflow-hidden">
+        {/* Left Column: QR Code + Room Code Card (Col 1-5, ordered second on mobile so game info & players are visible first) */}
+        <div className="order-2 md:order-1 md:col-span-5 bg-black/40 border border-white/15 rounded-2xl sm:rounded-3xl p-3 sm:p-4 backdrop-blur-xl flex flex-col items-center justify-between gap-2.5 sm:gap-3 shadow-xl relative overflow-hidden">
           {/* Subtle Glow */}
           <div
             className="absolute -top-10 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full opacity-20 filter blur-2xl pointer-events-none"
@@ -237,29 +237,29 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             <span className="text-[10px] font-extrabold text-purple-300 uppercase tracking-widest">
               {t('join_with_phone', language)}
             </span>
-            <span className="text-xs text-white/70">{t('scan_qr_to_enter', language)}</span>
+            <span className="text-[11px] sm:text-xs text-white/70">{t('scan_qr_to_enter', language)}</span>
           </div>
 
           {/* QR Code Display */}
-          <div className="p-2 bg-white rounded-2xl shadow-2xl relative group">
+          <div className="p-1.5 sm:p-2 bg-white rounded-xl sm:rounded-2xl shadow-2xl relative group">
             {qrCodeDataUrl ? (
               <img
                 src={qrCodeDataUrl}
                 alt="QR Code Salon"
-                className="w-36 h-36 sm:w-40 sm:h-40 object-contain rounded-lg"
+                className="w-28 h-28 sm:w-40 sm:h-40 object-contain rounded-lg"
               />
             ) : (
-              <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-lg bg-slate-900 flex items-center justify-center text-white/50 text-[10px]">
+              <div className="w-28 h-28 sm:w-40 sm:h-40 rounded-lg bg-slate-900 flex items-center justify-center text-white/50 text-[10px]">
                 {t('loading', language)}
               </div>
             )}
           </div>
 
           {/* Room Code Badge */}
-          <div className="w-full flex items-center justify-between bg-white/10 px-3 py-2 rounded-xl border border-white/20">
+          <div className="w-full flex items-center justify-between bg-white/10 px-3 py-1.5 sm:py-2 rounded-xl border border-white/20">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">{t('code_label', language)}</span>
-              <span className="text-xl sm:text-2xl font-black font-heading tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-pink-200 to-amber-200">
+              <span className="text-lg sm:text-2xl font-black font-heading tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-pink-200 to-amber-200">
                 {roomState.code}
               </span>
             </div>
@@ -326,8 +326,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Theme details, Connected Players & Launch Button (Col 6-12) */}
-        <div className="md:col-span-7 bg-black/40 border border-white/15 rounded-2xl sm:rounded-3xl p-3 sm:p-4 backdrop-blur-xl flex flex-col justify-between gap-2.5 shadow-xl">
+        {/* Right Column: Theme details, Connected Players & Launch Button (Col 6-12, ordered first on mobile) */}
+        <div className="order-1 md:order-2 md:col-span-7 bg-black/40 border border-white/15 rounded-2xl sm:rounded-3xl p-3 sm:p-4 backdrop-blur-xl flex flex-col justify-between gap-2.5 shadow-xl">
           
           {/* Header Info */}
           <div className="flex flex-col gap-1 border-b border-white/10 pb-2.5">

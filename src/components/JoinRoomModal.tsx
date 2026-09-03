@@ -22,6 +22,8 @@ interface JoinRoomModalProps {
   onJoinRoom: (code: string, playerName: string, avatar: string) => void;
   onOpenPublicRooms?: () => void;
   initialCode?: string;
+  defaultPlayerName?: string;
+  defaultAvatar?: string;
   isCodeLocked?: boolean;
   isConnecting?: boolean;
   isJoining?: boolean;
@@ -37,6 +39,8 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   onJoinRoom,
   onOpenPublicRooms,
   initialCode = '',
+  defaultPlayerName = '',
+  defaultAvatar = '🦊',
   isCodeLocked = false,
   isConnecting = false,
   isJoining = false,
@@ -44,8 +48,8 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
 }) => {
   const isActionLoading = isConnecting || isJoining;
   const [code, setCode] = useState(initialCode);
-  const [playerName, setPlayerName] = useState('');
-  const [avatar, setAvatar] = useState('🦊');
+  const [playerName, setPlayerName] = useState(defaultPlayerName || '');
+  const [avatar, setAvatar] = useState(defaultAvatar || '🦊');
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,6 +57,18 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
       setCode(initialCode.toUpperCase());
     }
   }, [initialCode]);
+
+  useEffect(() => {
+    if (defaultPlayerName && !playerName) {
+      setPlayerName(defaultPlayerName);
+    }
+  }, [defaultPlayerName]);
+
+  useEffect(() => {
+    if (defaultAvatar) {
+      setAvatar(defaultAvatar);
+    }
+  }, [defaultAvatar]);
 
   if (!isOpen) return null;
 
