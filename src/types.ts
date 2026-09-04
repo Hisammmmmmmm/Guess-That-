@@ -40,6 +40,8 @@ export interface Question {
   imageUrl?: string;
   secondaryImageUrl?: string;
   secondaryImageSource?: string;
+  tertiaryImageUrl?: string;
+  images?: string[];
   trivia: string;
   category?: string;
 }

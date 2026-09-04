@@ -18,11 +18,14 @@ import {
   Check,
   CheckCircle2,
   Radio,
+  BookOpen,
+  Star,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer, GameMode } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { multiplayerService } from '../services/multiplayerService';
+import { quizLibraryService } from '../services/quizLibraryService';
 import { t } from '../i18n/translations';
 
 interface MultiplayerResultsViewProps {
@@ -36,6 +39,7 @@ interface MultiplayerResultsViewProps {
   onReplay?: () => void;
   onExitToMenu?: () => void;
   onSendReaction?: (emoji: string) => void;
+  onOpenLibrary?: () => void;
 }
 
 const MODE_SUGGESTIONS: Record<GameMode, string[]> = {
@@ -75,23 +79,55 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
   onPlayClickSound,
   onReplay,
   onExitToMenu,
+  onOpenLibrary,
 }) => {
   const [copied, setCopied] = useState(false);
   const [selectedMode, setSelectedMode] = useState<GameMode>((roomState.gameMode as GameMode) || 'quiz');
   const [newTopicInput, setNewTopicInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
-
-  // Sync mode if updated externally (e.g. host changed mode while guest is watching)
-  useEffect(() => {
-    if (roomState.gameMode && roomState.gameMode !== selectedMode) {
-      setSelectedMode(roomState.gameMode as GameMode);
-    }
-  }, [roomState.gameMode]);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   const playersList: RoomPlayer[] = Object.values(roomState.players || {});
   const sortedPlayers = [...playersList].sort((a, b) => b.score - a.score);
   const isHost = roomState.hostId === currentPlayerId;
+
+  // Auto-save room quiz to local library for this player (host or invited)
+  useEffect(() => {
+    if (roomState.quizData?.questions?.length) {
+      const myPlayer = roomState.players?.[currentPlayerId];
+      try {
+        const savedItem = quizLibraryService.saveQuiz(roomState.quizData, {
+          source: isHost ? 'generated' : 'invited',
+          bestScore: myPlayer?.score || 0,
+        });
+        setIsSaved(true);
+        setIsFavorite(savedItem.isFavorite);
+      } catch (err) {
+        console.warn('Error saving quiz to library in results view:', err);
+      }
+    }
+  }, [roomState.quizData, roomState.status, currentPlayerId, isHost]);
+
+  const handleToggleFavorite = () => {
+    soundEngine.playClick();
+    if (!roomState.quizData?.questions?.length) return;
+    const item = quizLibraryService.findSavedItem(roomState.quizData);
+    if (item) {
+      const next = quizLibraryService.toggleFavorite(item.id);
+      setIsFavorite(next);
+    } else {
+      const myPlayer = roomState.players?.[currentPlayerId];
+      const newItem = quizLibraryService.saveQuiz(roomState.quizData, {
+        source: isHost ? 'generated' : 'invited',
+        isFavorite: true,
+        bestScore: myPlayer?.score || 0,
+      });
+      setIsFavorite(newItem.isFavorite);
+      setIsSaved(true);
+    }
+  };
 
   const firstPlace = sortedPlayers[0];
   const secondPlace = sortedPlayers[1];
@@ -163,6 +199,16 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
           id: idx + 1,
         })),
       };
+
+      // Save immediately to host library
+      try {
+        quizLibraryService.saveQuiz(preparedData, {
+          source: 'generated',
+        });
+      } catch (saveErr) {
+        console.warn('Could not save chained quiz to library:', saveErr);
+      }
+
       multiplayerService.restartWithQuiz(roomState.code, preparedData, {
         gameMode: selectedMode,
         difficulty: roomState.difficulty || 'medium',
@@ -532,6 +578,36 @@ export const MultiplayerResultsView: React.FC<MultiplayerResultsViewProps> = ({
               <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
               <span className="truncate">{copied ? t('results_copied', language) : t('share_result', language)}</span>
             </button>
+          </div>
+
+          {/* Library & Favorite row for multiplayer quiz */}
+          <div className="flex items-center justify-center gap-2 w-full pt-1">
+            <button
+              onClick={handleToggleFavorite}
+              id="btn-toggle-favorite-multi"
+              className={`flex-1 py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                isFavorite
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/20'
+                  : 'bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-yellow-400'}`} />
+              <span>{isFavorite ? 'Enregistré dans tes Favoris ⭐' : t('add_to_favorites', language)}</span>
+            </button>
+
+            {onOpenLibrary && (
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  onOpenLibrary();
+                }}
+                id="btn-open-library-from-multi"
+                className="py-2 px-3.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-purple-300" />
+                <span>Bibliothèque</span>
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import crypto from 'crypto';
 import { generateFallbackQuiz } from './src/data/fallbackGenerator';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -291,18 +292,22 @@ async function startServer() {
   // Robust Image Retriever using DuckDuckGo (Primary Engine)
   async function fetchDDGImage(query: string, answer: string = '', topic: string = '', skipIndex: number = 0): Promise<string | null> {
     const cleanQ = (query || '').trim();
-    if (!cleanQ && !answer) return null;
-    const cacheKey = `${cleanQ}_${answer}_${topic}_skip${skipIndex}`;
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    if (!cleanQ && !cleanAns) return null;
+    const cacheKey = `${cleanTopic}_${cleanAns}_${cleanQ}_skip${skipIndex}`;
     
     if (wikiImageCache.has(cacheKey)) {
       return wikiImageCache.get(cacheKey)!;
     }
 
-    // Try top 2 specific queries prioritizing the exact character / item
+    // Try queries prioritizing "[topic] [answer]" then "[answer] [topic]" then specific query
     const queries = [
-      answer ? `${answer} ${topic}`.trim() : null,
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}`.trim() : null,
       cleanQ,
-    ].filter((q, i, arr): q is string => Boolean(q && q.length > 0 && arr.indexOf(q) === i)).slice(0, 2);
+      cleanAns ? `${cleanAns} photo hd` : null,
+    ].filter((q, i, arr): q is string => Boolean(q && q.length > 0 && arr.indexOf(q) === i)).slice(0, 3);
 
     for (const q of queries) {
       try {
@@ -390,70 +395,575 @@ async function startServer() {
     return topic.trim();
   }
 
-  // Second Image Search: exact same DuckDuckGo engine as Image 1, but formulated in English and with the Category taken into account
-  async function fetchSecondImage(query: string, answer: string = '', category: string = '', topic: string = ''): Promise<{ url: string | null; source: string }> {
+  const globalWebSearchCache = new Map<string, string>();
+  const wikimediaCommonsCache = new Map<string, string>();
+  const wikidataCache = new Map<string, string>();
+  const ddgEnglishCache = new Map<string, string>();
+  const wikiSummaryLeadCache = new Map<string, string>();
+  const mediaWikiPageImageCache = new Map<string, string>();
+  const openverseCache = new Map<string, string>();
+  const bingAltWallpaperCache = new Map<string, string>();
+  const wikimediaDeepFileCache = new Map<string, string>();
+
+  // LOGIQUE 2 : Graphe de Connaissance Wikidata P18 (Photo officielle canonique du sujet/personnage/monument)
+  async function fetchWikidataImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
     const cleanAns = (answer || '').trim();
-    const cleanCat = (category || '').trim();
     const cleanTopic = (topic || '').trim();
     const cleanQ = (query || '').trim();
-    const cacheKey = `sec_en_${cleanQ}_${cleanAns}_${cleanCat}_${cleanTopic}`;
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} (${cleanTopic})`.trim() : null,
+      cleanAns || null,
+      cleanQ || null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
 
-    if (secondImageCache.has(cacheKey)) {
-      return { url: secondImageCache.get(cacheKey)!, source: 'Web (EN)' };
+    if (searchTargets.length === 0) return null;
+
+    const cacheKey = `wd_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (wikidataCache.has(cacheKey)) {
+      return wikidataCache.get(cacheKey)!;
     }
 
-    const engCat = translateCategoryToEnglish(cleanCat);
-    const engTopic = translateTopicToEnglish(cleanTopic);
+    for (const searchTarget of searchTargets) {
+      try {
+        const wdRes = await fetch(
+          `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(searchTarget)}&language=fr&limit=2&format=json`,
+          {
+            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+            signal: AbortSignal.timeout(1800),
+          }
+        );
+        if (!wdRes.ok) continue;
+        const wdData = await wdRes.json();
+        const entities = wdData.search || [];
+        for (const entity of entities) {
+          const entityId = entity.id;
+          if (!entityId) continue;
 
-    // Queries formulated in English with category + answer prioritization (top 2)
+          const entityRes = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`, {
+            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+            signal: AbortSignal.timeout(1800),
+          });
+          if (!entityRes.ok) continue;
+          const entityJson = await entityRes.json();
+          const filename = entityJson.entities?.[entityId]?.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
+          if (filename && typeof filename === 'string') {
+            const cleaned = filename.trim().replace(/\s+/g, '_');
+            const md5 = crypto.createHash('md5').update(cleaned).digest('hex');
+            const finalUrl = `https://upload.wikimedia.org/wikipedia/commons/${md5[0]}/${md5.substring(0, 2)}/${encodeURIComponent(cleaned)}`;
+            wikidataCache.set(cacheKey, finalUrl);
+            return finalUrl;
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 3 : Moteur Web Mondial Haute Définition (Index Web Global / Bing Async Images)
+  async function fetchGlobalWebImage(query: string, answer: string = '', category: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `global_web_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (globalWebSearchCache.has(cacheKey)) {
+      return globalWebSearchCache.get(cacheKey)!;
+    }
+
+    // Toujours mettre le sujet + le nom en priorité absolue (ex: "Dragon Ball Son Goku")
     const queries = [
-      engCat && cleanAns ? `${cleanAns} ${engCat}`.trim() : null,
-      cleanAns && engTopic ? `${cleanAns} ${engTopic}`.trim() : null,
-      cleanAns ? cleanAns : null,
-    ].filter((q, i, arr): q is string => Boolean(q && q.length > 0 && arr.indexOf(q) === i)).slice(0, 2);
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns} photo hd wallpaper` : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}`.trim() : null,
+      cleanQ,
+      cleanAns ? `${cleanAns} photo hd wallpaper` : null,
+    ].filter((q, i, arr): q is string => Boolean(q && arr.indexOf(q) === i));
+
+    for (const q of queries) {
+      try {
+        const url = `https://www.bing.com/images/async?q=${encodeURIComponent(q)}&first=0&count=15&scenario=ImageBasicHover&datsrc=N_I&layout=RowBased&mmasync=1`;
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+          },
+          signal: AbortSignal.timeout(2400),
+        });
+        if (res.ok) {
+          const html = await res.text();
+          const re = /murl&quot;:&quot;(https?:[^&]+)&quot;/g;
+          let m;
+          while ((m = re.exec(html)) !== null) {
+            const candidateUrl = m[1];
+            if (
+              candidateUrl &&
+              candidateUrl.startsWith('http') &&
+              !candidateUrl.endsWith('.svg') &&
+              !candidateUrl.toLowerCase().includes('logo') &&
+              !candidateUrl.toLowerCase().includes('icon')
+            ) {
+              globalWebSearchCache.set(cacheKey, candidateUrl);
+              return candidateUrl;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 4 : Recherche DuckDuckGo EN ANGLAIS (Région mondiale wt-wt, mots clés anglophones HD wallpaper / photo)
+  async function fetchDDGEnglishImage(query: string, answer: string = '', category: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanTopicEn = translateTopicToEnglish(topic);
+    const cleanCatEn = translateCategoryToEnglish(category);
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `ddg_en_${cleanTopic}_${cleanAns}_${cleanCatEn}_${cleanTopicEn}`.toLowerCase();
+    if (ddgEnglishCache.has(cacheKey)) {
+      return ddgEnglishCache.get(cacheKey)!;
+    }
+
+    // Toujours mettre le sujet + le nom en tête de recherche
+    const queries = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanTopicEn && cleanAns ? `${cleanTopicEn} ${cleanAns} hd wallpaper` : null,
+      cleanTopicEn && cleanAns ? `${cleanTopicEn} ${cleanAns} character` : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}`.trim() : null,
+      cleanCatEn && cleanAns ? `${cleanAns} ${cleanCatEn} photo hd` : null,
+      cleanQ,
+    ].filter((q, i, arr): q is string => Boolean(q && q.length > 0 && arr.indexOf(q) === i));
 
     for (const q of queries) {
       try {
         const res = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(q)}&t=h_&iax=images&ia=images`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-          signal: AbortSignal.timeout(2500),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+          signal: AbortSignal.timeout(2200),
         });
         const text = await res.text();
-        
-        let vqdMatch = text.match(/vqd=["']?([\d-]+)["']?/);
-        if (!vqdMatch) vqdMatch = text.match(/vqd=([^&'"]+)/);
-        
+        const vqdMatch = text.match(/vqd=["']?([\d-]+)["']?/) || text.match(/vqd=([^&'"]+)/);
         if (vqdMatch && vqdMatch[1]) {
           const vqd = vqdMatch[1];
-          const imgRes = await fetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(q)}&vqd=${vqd}&f=,,,&p=1`, {
+          const imgRes = await fetch(`https://duckduckgo.com/i.js?l=wt-wt&o=json&q=${encodeURIComponent(q)}&vqd=${vqd}&f=,,,&p=1`, {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'application/json, text/javascript, */*; q=0.01'
+              'Accept': 'application/json, text/javascript, */*; q=0.01',
             },
-            signal: AbortSignal.timeout(2500),
+            signal: AbortSignal.timeout(2200),
           });
           const imgData = await imgRes.json();
-          
-          const validImages = (imgData.results || []).filter((r: any) => 
+          const validImages = (imgData.results || []).filter((r: any) =>
             r.image &&
-            !r.image.toLowerCase().includes('logo') && 
+            !r.image.toLowerCase().includes('logo') &&
             !r.image.toLowerCase().includes('icon') &&
             !r.image.endsWith('.svg')
           );
-          
           if (validImages.length > 0) {
-            const imgUrl = validImages[0].image;
-            secondImageCache.set(cacheKey, imgUrl);
-            return { url: imgUrl, source: 'Web (EN)' };
+            const foundUrl = validImages[0].image;
+            ddgEnglishCache.set(cacheKey, foundUrl);
+            return foundUrl;
           }
         }
-      } catch (e) {
-        // try next query
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 5 : Base Mondiale Wikimedia Commons (+100M photographies & documents d'archives)
+  async function fetchWikimediaCommonsImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `commons_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (wikimediaCommonsCache.has(cacheKey)) {
+      return wikimediaCommonsCache.get(cacheKey)!;
+    }
+
+    const queries = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}`.trim() : null,
+      cleanAns || null,
+      cleanQ || null,
+    ].filter((q, i, arr): q is string => Boolean(q && arr.indexOf(q) === i));
+
+    for (const q of queries) {
+      try {
+        const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrlimit=6&gsrnamespace=6&prop=imageinfo&iiprop=url|mime&format=json`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+          signal: AbortSignal.timeout(2200),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const pages = data.query?.pages || {};
+          for (const k of Object.keys(pages)) {
+            const info = pages[k].imageinfo?.[0];
+            if (
+              info &&
+              info.url &&
+              typeof info.url === 'string' &&
+              !info.url.endsWith('.svg') &&
+              (info.mime || '').startsWith('image/')
+            ) {
+              wikimediaCommonsCache.set(cacheKey, info.url);
+              return info.url;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 6 : Image d'en-tête encyclopédique haute définition (API REST Wikimedia Summary / Fr & En)
+  async function fetchWikipediaLeadImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `wiki_lead_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (wikiSummaryLeadCache.has(cacheKey)) {
+      return wikiSummaryLeadCache.get(cacheKey)!;
+    }
+
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} (${cleanTopic})`.trim() : null,
+      cleanAns || null,
+      cleanQ || null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
+
+    for (const searchTarget of searchTargets) {
+      for (const lang of ['fr', 'en']) {
+        try {
+          const summaryRes = await fetch(
+            `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(searchTarget)}`,
+            {
+              headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+              signal: AbortSignal.timeout(1800),
+            }
+          );
+          if (summaryRes.ok) {
+            const sData = await summaryRes.json();
+            const cand = sData.originalimage?.source || sData.thumbnail?.source;
+            if (cand && typeof cand === 'string' && !cand.endsWith('.svg') && !cand.toLowerCase().includes('wikipedia-logo')) {
+              wikiSummaryLeadCache.set(cacheKey, cand);
+              return cand;
+            }
+          }
+        } catch {}
       }
     }
 
-    return { url: null, source: 'Web (EN)' };
+    return null;
   }
+
+  // LOGIQUE 7 : MediaWiki PageImages Generator Search 1200px (Recherche encyclopédique multilingue FR & EN)
+  async function fetchMediaWikiPageImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `mw_page_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (mediaWikiPageImageCache.has(cacheKey)) {
+      return mediaWikiPageImageCache.get(cacheKey)!;
+    }
+
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} (${cleanTopic})`.trim() : null,
+      cleanAns || null,
+      cleanQ || null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
+
+    for (const target of searchTargets) {
+      for (const lang of ['fr', 'en']) {
+        try {
+          const url = `https://${lang}.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(target)}&gsrlimit=3&prop=pageimages&pithumbsize=1200&format=json`;
+          const res = await fetch(url, {
+            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+            signal: AbortSignal.timeout(2000),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const pages = Object.values(data.query?.pages || {});
+            for (const p of pages as any[]) {
+              const src = p.thumbnail?.source;
+              if (src && typeof src === 'string' && !src.endsWith('.svg') && !src.toLowerCase().includes('logo') && !src.toLowerCase().includes('icon')) {
+                mediaWikiPageImageCache.set(cacheKey, src);
+                return src;
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 8 : Catalogue Mondial Openverse Creative Commons (Flickr, Musées mondiaux, Smithsonian, Archives)
+  async function fetchOpenverseImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `openverse_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (openverseCache.has(cacheKey)) {
+      return openverseCache.get(cacheKey)!;
+    }
+
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns}`.trim() : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}`.trim() : null,
+      cleanAns || null,
+      cleanQ || null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
+
+    for (const target of searchTargets) {
+      try {
+        const url = `https://api.openverse.org/v1/images/?q=${encodeURIComponent(target)}&page_size=5`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+          signal: AbortSignal.timeout(2200),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          for (const r of data.results || []) {
+            if (
+              r.url &&
+              typeof r.url === 'string' &&
+              r.url.startsWith('http') &&
+              !r.url.endsWith('.svg') &&
+              !r.url.toLowerCase().includes('logo') &&
+              !r.url.toLowerCase().includes('icon')
+            ) {
+              openverseCache.set(cacheKey, r.url);
+              return r.url;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 9 : Recherche Scénario 4K / Fanart, Décor & Vue Alternative HD
+  async function fetchBingAlternateWallpaperImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `bing_alt_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (bingAltWallpaperCache.has(cacheKey)) {
+      return bingAltWallpaperCache.get(cacheKey)!;
+    }
+
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns} 4k wallpaper fanart` : null,
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns} scene hd` : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic} artwork` : null,
+      cleanAns ? `${cleanAns} 4k wallpaper` : null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
+
+    for (const target of searchTargets) {
+      try {
+        const url = `https://www.bing.com/images/async?q=${encodeURIComponent(target)}&first=0&count=12&scenario=ImageBasicHover&datsrc=N_I&layout=RowBased&mmasync=1`;
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(2200),
+        });
+        if (res.ok) {
+          const html = await res.text();
+          const re = /murl&quot;:&quot;(https?:[^&]+)&quot;/g;
+          let m;
+          while ((m = re.exec(html)) !== null) {
+            const candidateUrl = m[1];
+            if (
+              candidateUrl &&
+              candidateUrl.startsWith('http') &&
+              !candidateUrl.endsWith('.svg') &&
+              !candidateUrl.toLowerCase().includes('logo') &&
+              !candidateUrl.toLowerCase().includes('icon')
+            ) {
+              bingAltWallpaperCache.set(cacheKey, candidateUrl);
+              return candidateUrl;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // LOGIQUE 10 : Recherche Profonde Wikimedia Media & Résolution Fichiers Bitmap
+  async function fetchWikimediaDeepFileImage(query: string, answer: string = '', topic: string = ''): Promise<string | null> {
+    const cleanAns = (answer || '').trim();
+    const cleanTopic = (topic || '').trim();
+    const cleanQ = (query || '').trim();
+    if (!cleanAns && !cleanQ) return null;
+
+    const cacheKey = `commons_deep_${cleanTopic}_${cleanAns}_${cleanQ}`.toLowerCase();
+    if (wikimediaDeepFileCache.has(cacheKey)) {
+      return wikimediaDeepFileCache.get(cacheKey)!;
+    }
+
+    const searchTargets = [
+      cleanTopic && cleanAns ? `${cleanTopic} ${cleanAns} filetype:bitmap` : null,
+      cleanAns && cleanTopic ? `${cleanAns} ${cleanTopic}` : null,
+      cleanAns || null,
+    ].filter((s, idx, arr): s is string => Boolean(s && arr.indexOf(s) === idx));
+
+    for (const target of searchTargets) {
+      try {
+        const url = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(target)}&srlimit=4&srnamespace=6&format=json`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+          signal: AbortSignal.timeout(2000),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const titles = (data.query?.search || []).map((s: any) => s.title);
+          for (const title of titles) {
+            const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url|mime&format=json`;
+            const iRes = await fetch(infoUrl, {
+              headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
+              signal: AbortSignal.timeout(1800),
+            });
+            if (iRes.ok) {
+              const iData = await iRes.json();
+              const p = Object.values(iData.query?.pages || {})[0] as any;
+              const u = p?.imageinfo?.[0]?.url;
+              if (u && typeof u === 'string' && !u.endsWith('.svg') && (p?.imageinfo?.[0]?.mime || '').startsWith('image/')) {
+                wikimediaDeepFileCache.set(cacheKey, u);
+                return u;
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  }
+
+  // Second Image Search: compatible wrapper
+  async function fetchSecondImage(query: string, answer: string = '', category: string = '', topic: string = ''): Promise<{ url: string | null; source: string }> {
+    const imgGlobal = await fetchGlobalWebImage(query, answer, category, topic);
+    if (imgGlobal) return { url: imgGlobal, source: 'Recherche Web HD' };
+    const imgWd = await fetchWikidataImage(query, answer, topic);
+    if (imgWd) return { url: imgWd, source: 'Wikidata Canonique' };
+    const imgMw = await fetchMediaWikiPageImage(query, answer, topic);
+    if (imgMw) return { url: imgMw, source: 'MediaWiki HD' };
+    const imgOpen = await fetchOpenverseImage(query, answer, topic);
+    if (imgOpen) return { url: imgOpen, source: 'Openverse Global' };
+    const imgAlt = await fetchBingAlternateWallpaperImage(query, answer, topic);
+    if (imgAlt) return { url: imgAlt, source: 'Scène 4K' };
+    const imgDdgEn = await fetchDDGEnglishImage(query, answer, category, topic);
+    if (imgDdgEn) return { url: imgDdgEn, source: 'DuckDuckGo EN' };
+    const imgCommons = await fetchWikimediaCommonsImage(query, answer, topic);
+    if (imgCommons) return { url: imgCommons, source: 'Wikimedia Commons' };
+    const imgDeep = await fetchWikimediaDeepFileImage(query, answer, topic);
+    if (imgDeep) return { url: imgDeep, source: 'Archives Commons' };
+    const imgLead = await fetchWikipediaLeadImage(query, answer, topic);
+    if (imgLead) return { url: imgLead, source: 'Encyclopédie HD' };
+    return { url: null, source: 'Web' };
+  }
+
+  // Multi-Image Search endpoint: renvoie jusqu'à 10 images distinctes cherchées avec 10 logiques indépendantes
+  app.get('/api/multi-images', async (req, res) => {
+    try {
+      const q = (req.query.q as string || '').trim();
+      const answer = (req.query.answer as string || '').trim();
+      const category = (req.query.category as string || '').trim();
+      const topic = (req.query.topic as string || '').trim();
+      if (!q && !answer) {
+        return res.status(400).json({ error: 'Query or answer is required' });
+      }
+
+      // 10 logiques distinctes exécutées simultanément en parallèle
+      const results = await Promise.allSettled([
+        fetchDDGImage(q, answer, topic, 0),
+        fetchGlobalWebImage(q, answer, category, topic),
+        fetchWikidataImage(q, answer, topic),
+        fetchDDGEnglishImage(q, answer, category, topic),
+        fetchWikimediaCommonsImage(q, answer, topic),
+        fetchWikipediaLeadImage(q, answer, topic),
+        fetchMediaWikiPageImage(q, answer, topic),
+        fetchOpenverseImage(q, answer, topic),
+        fetchBingAlternateWallpaperImage(q, answer, topic),
+        fetchWikimediaDeepFileImage(q, answer, topic),
+      ]);
+
+      const candidates = results.map(r => r.status === 'fulfilled' ? r.value : null);
+      const pool = candidates.filter(
+        (x): x is string => Boolean(x && typeof x === 'string' && x.startsWith('http') && !x.includes('Wikipedia-logo'))
+      );
+      const distinct = Array.from(new Set(pool));
+
+      return res.json({
+        imageUrl: distinct[0] || null,
+        secondaryImageUrl: distinct[1] || distinct[0] || null,
+        tertiaryImageUrl: distinct[2] || distinct[1] || distinct[0] || null,
+        images: distinct,
+      });
+    } catch (err) {
+      console.error('Multi-images search error:', err);
+      res.status(500).json({ error: 'Failed to search images' });
+    }
+  });
+
+  // Proxy d'image pour contourner tout blocage CORS ou Referrer sur les images distantes
+  app.get('/api/image-proxy', async (req, res) => {
+    try {
+      const targetUrl = (req.query.url as string || '').trim();
+      if (!targetUrl || !targetUrl.startsWith('http')) {
+        return res.status(400).send('Invalid url');
+      }
+
+      const response = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).send('Failed to fetch image upstream');
+      }
+
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      
+      const buffer = await response.arrayBuffer();
+      return res.send(Buffer.from(buffer));
+    } catch (e: any) {
+      return res.status(502).send('Image proxy error: ' + (e?.message || 'unknown'));
+    }
+  });
 
   // Dual Image Search endpoint
   app.get('/api/wiki-image', async (req, res) => {
@@ -465,14 +975,21 @@ async function startServer() {
       if (!q && !fallback) {
         return res.status(400).json({ error: 'Query is required' });
       }
-      const [img1, img2Data] = await Promise.all([
+      const [img1, img2, img3] = await Promise.all([
         fetchDDGImage(q, fallback, topic, 0),
-        fetchSecondImage(q, fallback, category, topic)
+        fetchGlobalWebImage(q, fallback, category, topic),
+        fetchDDGEnglishImage(q, fallback, category, topic),
       ]);
+      const pool = [img1, img2, img3].filter(
+        (x): x is string => Boolean(x && typeof x === 'string' && x.startsWith('http') && !x.includes('Wikipedia-logo'))
+      );
+      const distinct = Array.from(new Set(pool));
       return res.json({ 
-        imageUrl: img1, 
-        secondaryImageUrl: img2Data.url || img1,
-        secondaryImageSource: img2Data.source
+        imageUrl: distinct[0] || null, 
+        secondaryImageUrl: distinct[1] || distinct[0] || null,
+        tertiaryImageUrl: distinct[2] || distinct[1] || distinct[0] || null,
+        images: distinct,
+        secondaryImageSource: 'Multi-Engine'
       });
     } catch (err) {
       console.error('Wiki image search error:', err);
@@ -583,17 +1100,19 @@ async function startServer() {
 - "question" : DOIT ÊTRE TRÈS COURTE, SIMPLE ET DIRECTE SANS AUCUN SPOILER. Exemples : "Qui est ce personnage ?", "Quel est cet objet ?", "De quelle série vient cette image ?", "Quel est ce lieu ?".
 - "options" : 4 propositions précises (dont 1 bonne réponse).
 - "clue" : Laisse ce champ vide "" (l'image est l'unique support de devinette).
-- "wikiSearchQuery" : LE NOM COMPLET OFFICIEL de l'entité/objet/série pour obtenir son image (ex: "Dragon Balls", "Épée de légende Zelda", "Batarang", "Central Perk", "Millennium Falcon").`;
+- "wikiSearchQuery" : LE SUJET SUIVI DU NOM COMPLET de l'entité/personnage pour la recherche d'images (ex: "${topic} Son Goku", "${topic} Tour Eiffel", "${topic} Millennium Falcon").`;
     } else if (gameMode === 'music_blind_test') {
       modeInstructions = `MODE : BLIND TEST MUSICAL (Reconnaissance audio & thèmes)
 - L'objectif est d'identifier les musiques cultes, génériques, OST ou thèmes sonores.
 - "question" : DOIT porter UNIQUEMENT sur l'écoute. Exemples : "De quelle œuvre vient cette musique ?", "De qui cette musique est-elle le thème ?", "Quel est ce morceau ?". NE DONNE AUCUN SPOILER.
 - "options" : 4 propositions de morceaux, œuvres ou personnages.
-- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "Naruto Sadness and Sorrow", "Interstellar Main Theme", "Zelda Gerudo Valley", "Darth Vader Imperial March").`;
+- "youtubeSearchQuery" : LE TITRE EXACT de l'OST, de la musique ou du thème à chercher sur YouTube (ex: "${topic} Theme OST", "Naruto Sadness and Sorrow", "Interstellar Main Theme").
+- "wikiSearchQuery" : "${topic} [Bonne réponse]".`;
     } else {
       modeInstructions = `MODE : QUIZ CLASSIQUE
 - Questions variées de culture générale, énigmes, citations et devinettes sur le thème.
-- "youtubeSearchQuery" : Fournis le titre exact d'une musique, OST ou ambiance sonore liée au sujet.`;
+- "youtubeSearchQuery" : Fournis le titre exact d'une musique, OST ou ambiance sonore liée au sujet.
+- "wikiSearchQuery" : "${topic} [Bonne réponse]".`;
     }
 
     let difficultyInstructions = '';
@@ -761,28 +1280,38 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
         parsedData.questions.map(async (q: any, idx: number) => {
           const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
           
-          let finalImg1 = q.imageUrl || `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`;
-          let finalImg2 = q.secondaryImageUrl || finalImg1;
-          let secondarySource = 'Web (EN)';
+          let finalImg1 = q.imageUrl || '';
+          let finalImg2 = q.secondaryImageUrl || '';
+          let finalImg3 = q.tertiaryImageUrl || '';
+          let secondarySource = 'Multi-Engine';
+          let distinctImages: string[] = [];
 
           try {
+            // 10 Logiques distinctes exécutées en parallèle avec timeout strict
             const results = await Promise.allSettled([
               fetchDDGImage(primaryQuery, q.correctAnswer, topic, 0),
-              fetchSecondImage(primaryQuery, q.correctAnswer, q.category || '', topic)
+              fetchGlobalWebImage(primaryQuery, q.correctAnswer, q.category || '', topic),
+              fetchWikidataImage(primaryQuery, q.correctAnswer, topic),
+              fetchDDGEnglishImage(primaryQuery, q.correctAnswer, q.category || '', topic),
+              fetchWikimediaCommonsImage(primaryQuery, q.correctAnswer, topic),
+              fetchWikipediaLeadImage(primaryQuery, q.correctAnswer, topic),
+              fetchMediaWikiPageImage(primaryQuery, q.correctAnswer, topic),
+              fetchOpenverseImage(primaryQuery, q.correctAnswer, topic),
+              fetchBingAlternateWallpaperImage(primaryQuery, q.correctAnswer, topic),
+              fetchWikimediaDeepFileImage(primaryQuery, q.correctAnswer, topic),
             ]);
 
-            const wikiImg = results[0].status === 'fulfilled' ? results[0].value : null;
-            const secondData = results[1].status === 'fulfilled' ? results[1].value : null;
+            const candidates = results.map(r => r.status === 'fulfilled' ? r.value : null);
 
-            if (wikiImg) finalImg1 = wikiImg;
-            else if (secondData?.url) finalImg1 = secondData.url;
+            // Rassemble les images valides sans doublon ni faux logo
+            const pool = [...candidates, q.imageUrl, q.secondaryImageUrl, ...(Array.isArray(q.images) ? q.images : [])].filter(
+              (x): x is string => Boolean(x && typeof x === 'string' && x.startsWith('http') && !x.includes('Wikipedia-logo'))
+            );
+            distinctImages = Array.from(new Set(pool));
 
-            if (secondData?.url && secondData.url !== finalImg1) {
-              finalImg2 = secondData.url;
-              secondarySource = secondData.source || 'Web (EN)';
-            } else {
-              finalImg2 = finalImg1;
-            }
+            finalImg1 = distinctImages[0] || '';
+            finalImg2 = distinctImages[1] || distinctImages[0] || '';
+            finalImg3 = distinctImages[2] || distinctImages[1] || distinctImages[0] || '';
           } catch {}
 
           let youtubeVideoIds: string[] = [];
@@ -840,6 +1369,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             options: optionsList,
             imageUrl: finalImg1,
             secondaryImageUrl: finalImg2,
+            tertiaryImageUrl: finalImg3,
+            images: distinctImages.length > 0 ? distinctImages : [finalImg1, finalImg2, finalImg3].filter(Boolean),
             secondaryImageSource: secondarySource,
             youtubeVideoId: youtubeVideoIds[0] || q.youtubeVideoId,
             youtubeVideoIds: youtubeVideoIds.length > 0 ? youtubeVideoIds : (q.youtubeVideoIds || []),

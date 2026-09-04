@@ -21,6 +21,7 @@ import {
   Users,
   QrCode,
   Lock,
+  BookOpen,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuizTheme, GameMode, GameDifficulty, GameStyle } from '../types';
@@ -43,6 +44,8 @@ interface ThemeSelectorProps {
   onPlayHoverSound?: () => void;
   onOpenJoinRoom?: () => void;
   onOpenPublicRooms?: () => void;
+  onOpenLibrary?: () => void;
+  libraryCount?: number;
 }
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -80,6 +83,8 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   onPlayHoverSound,
   onOpenJoinRoom,
   onOpenPublicRooms,
+  onOpenLibrary,
+  libraryCount = 0,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [customTopic, setCustomTopic] = useState('');
@@ -288,6 +293,26 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
                   </div>
 
                   <div className="flex flex-row items-center gap-1.5 sm:gap-2 w-full md:w-auto shrink-0">
+                    {onOpenLibrary && (
+                      <button
+                        type="button"
+                        id="btn-step1-library"
+                        onClick={() => {
+                          onPlayClickSound?.();
+                          onOpenLibrary();
+                        }}
+                        className="flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/50 text-purple-200 hover:text-white font-bold text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all hover:border-purple-300 shadow-md whitespace-nowrap"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                        <span>Bibliothèque</span>
+                        {libraryCount > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-purple-500 text-white text-[9px] font-black shrink-0">
+                            {libraryCount}
+                          </span>
+                        )}
+                      </button>
+                    )}
+
                     {onOpenPublicRooms && (
                       <button
                         type="button"

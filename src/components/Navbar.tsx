@@ -9,7 +9,8 @@ import {
   Gauge,
   Hash,
   Pause,
-  Play
+  Play,
+  BookOpen
 } from 'lucide-react';
 import { GameSettings, QuizData, GameScreen, RoomState } from '../types';
 import { soundEngine } from '../services/soundEngine';
@@ -22,6 +23,8 @@ interface NavbarProps {
   roomState?: RoomState | null;
   onUpdateSettings: (newSettings: Partial<GameSettings>) => void;
   onOpenSettings: () => void;
+  onOpenLibrary?: () => void;
+  libraryCount?: number;
   onExitToMenu: () => void;
   onPlayClickSound?: () => void;
   isPaused?: boolean;
@@ -35,6 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   roomState,
   onUpdateSettings,
   onOpenSettings,
+  onOpenLibrary,
+  libraryCount = 0,
   onExitToMenu,
   onPlayClickSound,
   isPaused,
@@ -163,6 +168,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </button>
+
+          {/* Library Button */}
+          {onOpenLibrary && (
+            <button
+              onClick={() => {
+                soundEngine.unlockAudio();
+                soundEngine.playClick();
+                onOpenLibrary();
+              }}
+              id="btn-open-library"
+              className="p-2.5 px-3 sm:px-3.5 rounded-2xl bg-purple-600/20 hover:bg-purple-600/35 border border-purple-400/40 text-purple-200 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 backdrop-blur-md shadow-md hover:border-purple-400"
+              title="Bibliothèque de Quiz & Favoris"
+            >
+              <BookOpen className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-bold hidden sm:inline">Bibliothèque</span>
+              {libraryCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-purple-500 text-white text-[10px] font-black shrink-0">
+                  {libraryCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Settings Button */}
           <button

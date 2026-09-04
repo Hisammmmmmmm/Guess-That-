@@ -20,6 +20,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
+import { quizLibraryService } from '../services/quizLibraryService';
 import { t } from '../i18n/translations';
 
 interface MultiplayerLobbyProps {
@@ -89,6 +90,19 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   const isHost = roomState.hostId === currentPlayerId;
   const questionsCount = roomState.quizData?.questions?.length || 0;
   const isReadyToPlay = !isQuizGenerating && questionsCount > 0;
+
+  // Auto-save quiz data to library when loaded in lobby
+  useEffect(() => {
+    if (roomState.quizData?.questions?.length) {
+      try {
+        quizLibraryService.saveQuiz(roomState.quizData, {
+          source: isHost ? 'generated' : 'invited',
+        });
+      } catch (err) {
+        console.warn('Auto-save in lobby failed:', err);
+      }
+    }
+  }, [roomState.quizData, isHost]);
 
   // Generate join URL
   const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomState.code}`;

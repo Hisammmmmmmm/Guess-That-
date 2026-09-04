@@ -14,10 +14,14 @@ import {
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
+  BookOpen,
+  Star,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameStats, QuizData, GameStyle } from '../types';
 import { soundEngine } from '../services/soundEngine';
+import { quizLibraryService } from '../services/quizLibraryService';
 
 import { t } from '../i18n/translations';
 
@@ -29,6 +33,7 @@ interface ResultsViewProps {
   onNewTheme: () => void;
   onPlayClickSound?: () => void;
   gameStyle?: GameStyle;
+  onOpenLibrary?: () => void;
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({
@@ -39,9 +44,39 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   onNewTheme,
   onPlayClickSound,
   gameStyle = 'competitive',
+  onOpenLibrary,
 }) => {
   const [copied, setCopied] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    // Auto-save quiz to local library and record score
+    const item = quizLibraryService.saveQuiz(quizData, {
+      source: 'generated',
+      bestScore: stats.score,
+    });
+    setIsSaved(true);
+    setIsFavorite(item.isFavorite);
+  }, [quizData, stats.score]);
+
+  const handleToggleFavorite = () => {
+    soundEngine.playClick();
+    const item = quizLibraryService.findSavedItem(quizData);
+    if (item) {
+      const next = quizLibraryService.toggleFavorite(item.id);
+      setIsFavorite(next);
+    } else {
+      const newItem = quizLibraryService.saveQuiz(quizData, {
+        source: 'generated',
+        isFavorite: true,
+        bestScore: stats.score,
+      });
+      setIsFavorite(newItem.isFavorite);
+      setIsSaved(true);
+    }
+  };
 
   const total = stats.totalQuestions || 15;
   const correct = stats.correctAnswers;
@@ -228,6 +263,36 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               <span>{copied ? t('score_copied', language) : t('share_result', language)}</span>
             </button>
           )}
+
+          {/* Library & Favorite row */}
+          <div className="flex items-center justify-center gap-2 w-full pt-1">
+            <button
+              onClick={handleToggleFavorite}
+              id="btn-toggle-favorite-result"
+              className={`flex-1 py-2 px-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                isFavorite
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/20'
+                  : 'bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-yellow-400'}`} />
+              <span>{isFavorite ? 'Enregistré dans tes Favoris ⭐' : t('add_to_favorites', language)}</span>
+            </button>
+
+            {onOpenLibrary && (
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  onOpenLibrary();
+                }}
+                id="btn-open-library-from-result"
+                className="py-2 px-3.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-purple-300" />
+                <span>Bibliothèque</span>
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
 

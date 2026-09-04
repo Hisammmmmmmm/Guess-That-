@@ -12,6 +12,8 @@ import {
   Volume2,
   RefreshCw,
   Coffee,
+  BookOpen,
+  Star,
 } from 'lucide-react';
 import {
   QuizData,
@@ -49,6 +51,8 @@ import { JoinRoomModal } from './components/JoinRoomModal';
 import { PublicRoomsModal } from './components/PublicRoomsModal';
 import { MultiplayerScoreboard } from './components/MultiplayerScoreboard';
 import { MultiplayerResultsView } from './components/MultiplayerResultsView';
+import { QuizLibraryModal } from './components/QuizLibraryModal';
+import { quizLibraryService } from './services/quizLibraryService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Fisher-Yates array shuffler
@@ -166,6 +170,15 @@ export default function App() {
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
   const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string; name: string }[]>([]);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [libraryCount, setLibraryCount] = useState<number>(() => quizLibraryService.getAll().length);
+
+  useEffect(() => {
+    const unsub = quizLibraryService.subscribe(() => {
+      setLibraryCount(quizLibraryService.getAll().length);
+    });
+    return () => unsub();
+  }, []);
 
   // Stored player profile (Host or guest)
   const [profileName, setProfileName] = useState<string>(() => {
@@ -368,6 +381,17 @@ export default function App() {
       setRoomState(data.room);
       if (data.room?.quizData) {
         setQuizData(data.room.quizData);
+        // Auto-save to library for host and all participating players
+        try {
+          if (data.room.quizData.questions?.length) {
+            const isHost = data.room.hostId === currentPlayerId;
+            quizLibraryService.saveQuiz(data.room.quizData, {
+              source: isHost ? 'generated' : 'invited',
+            });
+          }
+        } catch (saveErr) {
+          console.warn('Auto-save on game_started failed:', saveErr);
+        }
       }
       const newMode = data.room?.gameMode || data.room?.quizData?.gameMode;
       if (newMode) {
@@ -449,6 +473,21 @@ export default function App() {
         ttsAudioRef.current = null;
       }
       setRoomState(data.room);
+      if (data.room?.quizData?.questions?.length) {
+        setQuizData(data.room.quizData);
+        // Persist final score in library
+        try {
+          const myId = currentPlayerId;
+          const myPlayer = myId ? data.room.players?.[myId] : null;
+          const isHost = data.room.hostId === myId;
+          quizLibraryService.saveQuiz(data.room.quizData, {
+            source: isHost ? 'generated' : 'invited',
+            bestScore: myPlayer?.score || 0,
+          });
+        } catch (saveErr) {
+          console.warn('Auto-save on game_over failed:', saveErr);
+        }
+      }
       stopTimer();
       soundEngine.stopAmbience();
       soundEngine.playGameOver();
@@ -630,16 +669,50 @@ export default function App() {
   };
 
   // --- START QUIZ WITH DATA ---
-  const startQuiz = async (rawData: QuizData) => {
+  const startQuiz = async (
+    rawData: QuizData,
+    forcedMode?: GameMode,
+    forcedDifficulty?: GameDifficulty
+  ) => {
     soundEngine.unlockAudio();
     soundEngine.playMenuSelect();
 
+    // Clear multiplayer room state if launching solo game
+    if (currentRoomCode || currentRoomCodeRef.current) {
+      try {
+        multiplayerService.leaveRoom(currentRoomCode || currentRoomCodeRef.current || '');
+      } catch {}
+    }
+    setRoomState(null);
+    setCurrentRoomCode(null);
+    currentRoomCodeRef.current = null;
+    setCurrentPlayerId(null);
+
     // Randomize options order for every single question
     const preparedData = prepareQuizData(rawData);
-    const targetMode = (preparedData.gameMode || rawData.gameMode || settings.gameMode || 'quiz') as GameMode;
-    preparedData.gameMode = targetMode;
+    const targetMode = (
+      forcedMode ||
+      preparedData.gameMode ||
+      rawData.gameMode ||
+      settings.gameMode ||
+      'quiz'
+    ) as GameMode;
+    const targetDifficulty = (
+      forcedDifficulty ||
+      preparedData.difficulty ||
+      rawData.difficulty ||
+      settings.difficulty ||
+      'medium'
+    ) as GameDifficulty;
 
-    setSettings((prev) => ({ ...prev, gameMode: targetMode }));
+    preparedData.gameMode = targetMode;
+    preparedData.difficulty = targetDifficulty;
+
+    setSettings((prev) => ({
+      ...prev,
+      gameMode: targetMode,
+      difficulty: targetDifficulty,
+    }));
     setQuizData(preparedData);
     setCurrentQuestionIndex(0);
     setSelectedOption(null);
@@ -666,6 +739,56 @@ export default function App() {
     if (settings.musicEnabled && targetMode !== 'music_blind_test') {
       soundEngine.startAmbience(preparedData.ambientSound || 'synthwave');
     }
+  };
+
+  // --- PLAY SAVED QUIZ FROM PERSONAL LIBRARY ---
+  const handlePlayFromLibrarySolo = (
+    savedQuiz: QuizData,
+    mode: GameMode,
+    difficulty: GameDifficulty
+  ) => {
+    setIsLibraryOpen(false);
+    soundEngine.unlockAudio();
+    soundEngine.playMenuSelect();
+    const finalMode = mode || savedQuiz.gameMode || 'quiz';
+    const finalDiff = difficulty || savedQuiz.difficulty || 'medium';
+    setSettings((prev) => ({
+      ...prev,
+      gameMode: finalMode,
+      difficulty: finalDiff,
+      gameStyle: 'competitive_solo',
+    }));
+    startQuiz(savedQuiz, finalMode, finalDiff);
+  };
+
+  const handlePlayFromLibraryMulti = (
+    savedQuiz: QuizData,
+    mode?: GameMode,
+    difficulty?: GameDifficulty
+  ) => {
+    setIsLibraryOpen(false);
+    const finalMode = mode || savedQuiz.gameMode || 'quiz';
+    const finalDiff = difficulty || savedQuiz.difficulty || 'medium';
+    handleCreateRoom(savedQuiz, finalMode, finalDiff);
+  };
+
+  const handlePlayFromLibrarySlideshow = (
+    savedQuiz: QuizData,
+    mode?: GameMode,
+    difficulty?: GameDifficulty
+  ) => {
+    setIsLibraryOpen(false);
+    soundEngine.unlockAudio();
+    soundEngine.playMenuSelect();
+    const targetMode = mode || savedQuiz.gameMode || 'quiz';
+    const targetDiff = difficulty || savedQuiz.difficulty || 'medium';
+    setSettings((prev) => ({
+      ...prev,
+      gameMode: targetMode,
+      difficulty: targetDiff,
+      gameStyle: 'slideshow',
+    }));
+    startQuiz(savedQuiz, targetMode, targetDiff);
   };
 
   // --- SELECT PRESET THEME ---
@@ -866,6 +989,17 @@ export default function App() {
       setPendingQuizData(finalPreparedData);
       setQuizData(finalPreparedData);
       setIsGenerating(false);
+
+      // Auto-save freshly generated quiz in user personal library
+      try {
+        if (finalPreparedData?.questions?.length) {
+          quizLibraryService.saveQuiz(finalPreparedData, {
+            source: 'generated',
+          });
+        }
+      } catch (saveErr) {
+        console.warn('Could not auto-save generated quiz to library', saveErr);
+      }
 
       if (finalStyle === 'competitive_room') {
         const targetRoom = currentRoomCodeRef.current || multiplayerService.getCurrentRoomCode() || currentRoomCode;
@@ -1383,17 +1517,45 @@ export default function App() {
   };
 
   // Create Multiplayer Room from Pending/Current Quiz Data
-  const handleCreateRoom = (dataToUse: QuizData) => {
+  const handleCreateRoom = (
+    dataToUse: QuizData,
+    forcedMode?: GameMode,
+    forcedDifficulty?: GameDifficulty
+  ) => {
     soundEngine.unlockAudio();
     soundEngine.playMenuSelect();
     const preparedData = prepareQuizData(dataToUse);
+    const targetMode = (
+      forcedMode ||
+      preparedData.gameMode ||
+      dataToUse.gameMode ||
+      settings.gameMode ||
+      'quiz'
+    ) as GameMode;
+    const targetDifficulty = (
+      forcedDifficulty ||
+      preparedData.difficulty ||
+      dataToUse.difficulty ||
+      settings.difficulty ||
+      'medium'
+    ) as GameDifficulty;
+
+    preparedData.gameMode = targetMode;
+    preparedData.difficulty = targetDifficulty;
+
     setQuizData(preparedData);
+    setSettings((prev) => ({
+      ...prev,
+      gameMode: targetMode,
+      difficulty: targetDifficulty,
+      gameStyle: 'competitive_room',
+    }));
     multiplayerService.createRoom({
       hostName: profileName?.trim() || 'Michel',
       avatar: profileAvatar || '👑',
       quizData: preparedData,
-      difficulty: settings.difficulty,
-      gameMode: settings.gameMode,
+      difficulty: targetDifficulty,
+      gameMode: targetMode,
       language: settings.language,
       durationPerQuestion: settings.durationPerQuestion,
     });
@@ -1416,6 +1578,8 @@ export default function App() {
         roomState={roomState}
         onUpdateSettings={updateSettings}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenLibrary={() => setIsLibraryOpen(true)}
+        libraryCount={libraryCount}
         onExitToMenu={handleExitToMenu}
         onPlayClickSound={() => soundEngine.playClick()}
         isPaused={isPaused}
@@ -1599,6 +1763,8 @@ export default function App() {
                 onOpenPublicRooms={() => {
                   setIsPublicRoomsModalOpen(true);
                 }}
+                onOpenLibrary={() => setIsLibraryOpen(true)}
+                libraryCount={libraryCount}
               />
               {errorMessage && (
                 <div className="mt-6 p-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium text-center">
@@ -1634,6 +1800,10 @@ export default function App() {
                 <p className="text-xs sm:text-sm text-white/70">
                   {t("quiz_ready", settings.language).replace("%s", pendingQuizData.themeTitle || pendingQuizData.topic)}
                 </p>
+                <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] sm:text-xs text-purple-300 font-medium">
+                  <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Enregistré dans votre bibliothèque</span>
+                </div>
               </div>
 
               {settings.gameStyle === 'competitive_room' ? (
@@ -1913,6 +2083,8 @@ export default function App() {
                             imageUrl={currentQuestion.imageUrl || ''}
                             secondaryImageUrl={currentQuestion.secondaryImageUrl}
                             secondaryImageSource={currentQuestion.secondaryImageSource}
+                            tertiaryImageUrl={currentQuestion.tertiaryImageUrl}
+                            images={currentQuestion.images}
                             imagePrompt={currentQuestion.imagePrompt}
                             category={currentQuestion.category}
                             clue=""
@@ -2033,6 +2205,7 @@ export default function App() {
                 onNewTheme={handleExitToMenu}
                 onPlayClickSound={() => soundEngine.playClick()}
                 gameStyle={settings.gameStyle}
+                onOpenLibrary={() => setIsLibraryOpen(true)}
               />
             </motion.div>
           )}
@@ -2053,6 +2226,7 @@ export default function App() {
                 onReplay={handleReplay}
                 onExitToMenu={handleExitToMenu}
                 onSendReaction={(emoji) => currentRoomCode && multiplayerService.sendReaction(currentRoomCode, emoji)}
+                onOpenLibrary={() => setIsLibraryOpen(true)}
               />
             </motion.div>
           )}
@@ -2128,6 +2302,16 @@ export default function App() {
         playerName={profileName}
         playerAvatar={profileAvatar}
         onUpdatePlayerProfile={handleUpdateProfile}
+      />
+
+      {/* Quiz Library Modal (Saved & Favorites, Import/Export, Replay) */}
+      <QuizLibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        language={settings.language}
+        onPlaySolo={handlePlayFromLibrarySolo}
+        onPlayMulti={handlePlayFromLibraryMulti}
+        onPlaySlideshow={handlePlayFromLibrarySlideshow}
       />
 
       {/* Live Statistics Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
