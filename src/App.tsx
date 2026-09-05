@@ -2095,6 +2095,8 @@ export default function App() {
                             onPlayClickSound={() => soundEngine.playClick()}
                             showTextClue={false}
                             fullHeight={true}
+                            correctAnswer={currentQuestion.correctAnswer}
+                            topic={quizData.topic}
                           />
                         )}
                       </ErrorBoundary>

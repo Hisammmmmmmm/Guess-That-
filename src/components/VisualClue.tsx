@@ -23,6 +23,8 @@ interface VisualClueProps {
   onPlayClickSound?: () => void;
   showTextClue?: boolean;
   fullHeight?: boolean;
+  correctAnswer?: string;
+  topic?: string;
 }
 
 interface ImageCandidate {
@@ -53,6 +55,8 @@ export const VisualClue: React.FC<VisualClueProps> = ({
   onPlayClickSound,
   showTextClue = true,
   fullHeight = false,
+  correctAnswer,
+  topic,
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeZoomIndex, setActiveZoomIndex] = useState<number | 'all'>('all');
@@ -61,6 +65,27 @@ export const VisualClue: React.FC<VisualClueProps> = ({
   const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
   const [proxiedUrls, setProxiedUrls] = useState<Map<string, string>>(new Map());
   const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set());
+  const [extraFetchedImages, setExtraFetchedImages] = useState<string[]>([]);
+
+  // Fetch extra images from backend if current images count is less than 5
+  useEffect(() => {
+    let isCancelled = false;
+    const currentCount = (Array.isArray(images) ? images.length : 0) + (imageUrl ? 1 : 0);
+    if (currentCount < 5 && (correctAnswer || imagePrompt)) {
+      const q = imagePrompt || `${correctAnswer || ''} ${topic || ''}`;
+      fetch(`/api/multi-images?q=${encodeURIComponent(q)}&answer=${encodeURIComponent(correctAnswer || '')}&topic=${encodeURIComponent(topic || '')}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (!isCancelled && data && Array.isArray(data.images) && data.images.length > 0) {
+            setExtraFetchedImages(data.images);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isCancelled = true;
+    };
+  }, [questionIndex, correctAnswer, topic, imagePrompt, imageUrl, images]);
 
   // Build candidate image list from all 10 distinct logics
   const rawCandidates: ImageCandidate[] = useMemo(() => {
@@ -84,8 +109,13 @@ export const VisualClue: React.FC<VisualClueProps> = ({
     };
 
     // If a full array of multi-logic images was passed from backend
-    if (Array.isArray(images) && images.length > 0) {
-      images.forEach((img, idx) => {
+    const allImageSources = [
+      ...(Array.isArray(images) ? images : []),
+      ...extraFetchedImages,
+    ];
+
+    if (allImageSources.length > 0) {
+      allImageSources.forEach((img, idx) => {
         let sourceName = 'Web HD';
         if (img.includes('openverse')) {
           sourceName = 'Openverse CC';
@@ -105,7 +135,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
           sourceName = `Source ${idx + 1}`;
         }
 
-        addCandidate(img, sourceName, idx + 1);
+        addCandidate(img, sourceName, list.length + 1);
       });
     }
 
@@ -121,13 +151,14 @@ export const VisualClue: React.FC<VisualClueProps> = ({
     }
 
     return list;
-  }, [imageUrl, secondaryImageUrl, secondaryImageSource, tertiaryImageUrl, images, language]);
+  }, [imageUrl, secondaryImageUrl, secondaryImageSource, tertiaryImageUrl, images, extraFetchedImages, language]);
 
   // Reset tracking state when question changes
   useEffect(() => {
     setFailedUrls(new Set());
     setProxiedUrls(new Map());
     setLoadedUrls(new Set());
+    setExtraFetchedImages([]);
     setActiveZoomIndex('all');
   }, [questionIndex, imageUrl]);
 
@@ -171,7 +202,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
     };
   };
 
-  // Grid column calculation for simultaneous display of ALL images
+  // Grid column calculation for simultaneous display of images
   const getGridClasses = (count: number) => {
     switch (count) {
       case 1:
@@ -183,7 +214,7 @@ export const VisualClue: React.FC<VisualClueProps> = ({
       case 4:
         return 'grid-cols-2 sm:grid-cols-4';
       case 5:
-        return 'grid-cols-3 sm:grid-cols-5';
+        return 'grid-cols-5';
       case 6:
         return 'grid-cols-3 sm:grid-cols-3 md:grid-cols-6';
       case 7:
@@ -192,9 +223,16 @@ export const VisualClue: React.FC<VisualClueProps> = ({
       case 9:
       case 10:
       default:
-        return 'grid-cols-3 sm:grid-cols-5';
+        return 'grid-cols-5';
     }
   };
+
+  const displayCandidates = useMemo(() => {
+    if (validCandidates.length >= 5) {
+      return validCandidates.slice(0, 5);
+    }
+    return validCandidates;
+  }, [validCandidates]);
 
   return (
     <div
@@ -215,10 +253,10 @@ export const VisualClue: React.FC<VisualClueProps> = ({
           <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider rounded-full bg-black/80 text-white/90 border border-white/20 backdrop-blur-md shadow-sm">
             {t('clue', language)} #{questionIndex + 1}/{totalQuestions}
           </span>
-          {validCandidates.length > 0 && (
+          {displayCandidates.length > 0 && (
             <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider rounded-full bg-purple-600/80 text-purple-100 border border-purple-400/40 backdrop-blur-md shadow-sm flex items-center gap-1">
               <Layers className="w-2.5 h-2.5" />
-              {validCandidates.length} {validCandidates.length > 1 ? 'images' : 'image'}
+              {displayCandidates.length} {displayCandidates.length > 1 ? 'images' : 'image'}
             </span>
           )}
           {category && (
@@ -254,11 +292,11 @@ export const VisualClue: React.FC<VisualClueProps> = ({
 
         {/* SIMULTANEOUS ALL-IMAGES GRID BODY */}
         <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-1 sm:p-1.5">
-          {validCandidates.length > 0 ? (
+          {displayCandidates.length > 0 ? (
             <div
-              className={`w-full h-full grid gap-1 sm:gap-1.5 ${getGridClasses(validCandidates.length)}`}
+              className={`w-full h-full grid gap-1 sm:gap-1.5 ${getGridClasses(displayCandidates.length)}`}
             >
-              {validCandidates.map((item, idx) => (
+              {displayCandidates.map((item, idx) => (
                 <div
                   key={`${item.id}-${item.effectiveUrl}`}
                   onClick={() => {
