@@ -539,6 +539,16 @@ export default function App() {
       setJoinErrorMessage(data.message || 'Erreur salon.');
     };
 
+    const handleRoomClosed = (data: any) => {
+      setIsJoiningRoom(false);
+      if (screen === 'room_lobby' || screen === 'playing' || screen === 'room_results') {
+        setCurrentRoomCode('');
+        setRoomState(null);
+        setScreen('menu');
+        setJoinErrorMessage(data.message || 'Le salon a été fermé.');
+      }
+    };
+
     multiplayerService.on('room_created', handleRoomCreated);
     multiplayerService.on('room_joined', handleRoomJoined);
     multiplayerService.on('joined_room', handleRoomJoined);
@@ -549,17 +559,24 @@ export default function App() {
     multiplayerService.on('next_question_started', handleNextQuestionStarted);
     multiplayerService.on('game_over', handleGameOver);
     multiplayerService.on('reaction', handleReaction);
+    multiplayerService.on('room_closed', handleRoomClosed);
     multiplayerService.on('error', handleError);
 
     const handleVisibilityOrFocus = () => {
       const code = currentRoomCodeRef.current || currentRoomCode;
-      if (code && multiplayerService.isConnected()) {
+      if (!multiplayerService.isConnected()) {
+        multiplayerService.connect().then((ok) => {
+          if (ok && code) {
+            multiplayerService.refreshRoom(code);
+          }
+        });
+      } else if (code) {
         multiplayerService.refreshRoom(code);
       }
     };
 
     window.addEventListener('focus', handleVisibilityOrFocus);
-    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     return () => {
       window.removeEventListener('focus', handleVisibilityOrFocus);
@@ -574,6 +591,7 @@ export default function App() {
       multiplayerService.off('next_question_started', handleNextQuestionStarted);
       multiplayerService.off('game_over', handleGameOver);
       multiplayerService.off('reaction', handleReaction);
+      multiplayerService.off('room_closed', handleRoomClosed);
       multiplayerService.off('error', handleError);
     };
   }, [currentPlayerId, quizData, settings.durationPerQuestion, settings.musicEnabled]);

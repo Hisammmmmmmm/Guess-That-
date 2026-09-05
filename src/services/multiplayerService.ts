@@ -27,6 +27,58 @@ class MultiplayerService {
   private currentPlayerId: string | null = null;
   private pendingQuizData: any = null;
   private isConnecting: boolean = false;
+  private listenersBound: boolean = false;
+
+  constructor() {
+    this.bindWindowLifecycle();
+  }
+
+  private bindWindowLifecycle() {
+    if (typeof window === 'undefined' || this.listenersBound) return;
+    this.listenersBound = true;
+
+    const handleResumeOrWake = () => {
+      if (document.visibilityState === 'visible' || document.hasFocus()) {
+        if (!this.isConnected()) {
+          this.connect().then((connected) => {
+            if (connected) {
+              if (this.currentRoomCode) {
+                this.refreshRoom(this.currentRoomCode);
+              }
+              this.requestPublicRooms();
+              this.requestStats();
+            }
+          });
+        } else {
+          if (this.currentRoomCode) {
+            this.refreshRoom(this.currentRoomCode);
+          }
+          this.requestPublicRooms();
+          this.requestStats();
+        }
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleResumeOrWake);
+    window.addEventListener('focus', handleResumeOrWake);
+    window.addEventListener('online', handleResumeOrWake);
+    window.addEventListener('pageshow', handleResumeOrWake);
+
+    const handleBeforeUnload = () => {
+      if (this.currentRoomCode && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.send(JSON.stringify({
+            type: 'leave_room',
+            code: this.currentRoomCode,
+            playerId: this.currentPlayerId,
+          }));
+        } catch {}
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+  }
 
   public getDeviceId(): string {
     return getOrCreateDeviceId();
@@ -60,6 +112,11 @@ class MultiplayerService {
         this.ws.onopen = () => {
           this.isConnecting = false;
           this.startHeartbeat();
+          if (this.currentRoomCode) {
+            this.refreshRoom(this.currentRoomCode);
+          }
+          this.requestPublicRooms();
+          this.requestStats();
           resolve(true);
         };
 
@@ -67,6 +124,13 @@ class MultiplayerService {
           try {
             const data = JSON.parse(event.data);
             if (data.type) {
+              if (data.type === 'ping') {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                  this.ws.send(JSON.stringify({ type: 'pong' }));
+                }
+                return;
+              }
+
               // Automatically sync active room code and player ID
               if (data.code) {
                 this.currentRoomCode = data.code;
@@ -129,7 +193,7 @@ class MultiplayerService {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 20000);
+    }, 12000);
   }
 
   private stopHeartbeat() {
