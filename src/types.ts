@@ -125,6 +125,7 @@ export interface PublicRoomSummary {
   isBotRoom?: boolean;
   currentQuestionIndex?: number;
   totalQuestions?: number;
+  createdAt?: number;
 }
 
 export interface GameSettings {
@@ -167,6 +168,43 @@ export interface GlobalStats {
   onlinePlayers: number;
   activeRooms: number;
   totalGenerations: number;
+}
+
+export interface ActivePlayerDetail {
+  id: string;
+  name: string;
+  avatar: string;
+  roomCode: string;
+  isHost: boolean;
+  topic: string;
+  themeTitle: string;
+  gameMode: GameMode | string;
+  status: 'lobby' | 'playing' | 'question_result' | 'game_over';
+  score: number;
+  streak: number;
+  currentQuestionIndex: number;
+  totalQuestions: number;
+  isOnline: boolean;
+}
+
+export interface RecentQuizDetail {
+  id: string;
+  topic: string;
+  themeTitle: string;
+  themeBgImage?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  gameMode: GameMode | string;
+  difficulty: GameDifficulty | string;
+  questionCount: number;
+  createdAt: number;
+  quizData?: QuizData;
+}
+
+export interface DetailedPlatformStats extends GlobalStats {
+  activePlayers: ActivePlayerDetail[];
+  activeRoomsList: PublicRoomSummary[];
+  recentQuizzes: RecentQuizDetail[];
 }
 
 export type GameScreen = 'menu' | 'generating' | 'ready' | 'playing' | 'results' | 'settings' | 'room_lobby' | 'room_results';

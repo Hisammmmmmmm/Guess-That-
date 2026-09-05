@@ -52,6 +52,7 @@ import { PublicRoomsModal } from './components/PublicRoomsModal';
 import { MultiplayerScoreboard } from './components/MultiplayerScoreboard';
 import { MultiplayerResultsView } from './components/MultiplayerResultsView';
 import { QuizLibraryModal } from './components/QuizLibraryModal';
+import { StatsDetailModal } from './components/StatsDetailModal';
 import { quizLibraryService } from './services/quizLibraryService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -172,6 +173,8 @@ export default function App() {
   const [floatingReactions, setFloatingReactions] = useState<{ id: string; emoji: string; name: string }[]>([]);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [libraryCount, setLibraryCount] = useState<number>(() => quizLibraryService.getAll().length);
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
+  const [statsModalInitialTab, setStatsModalInitialTab] = useState<'players' | 'rooms' | 'quizzes'>('players');
 
   useEffect(() => {
     const unsub = quizLibraryService.subscribe(() => {
@@ -2316,49 +2319,101 @@ export default function App() {
         onPlaySlideshow={handlePlayFromLibrarySlideshow}
       />
 
+      {/* Platform Detailed Stats Modal */}
+      <StatsDetailModal
+        isOpen={isStatsModalOpen}
+        onClose={() => setIsStatsModalOpen(false)}
+        initialTab={statsModalInitialTab}
+        language={settings.language}
+        onJoinRoom={(code) => {
+          setJoinModalInitialCode(code);
+          setIsJoinModalCodeLocked(true);
+          setIsJoinModalOpen(true);
+        }}
+        onPlayQuizSolo={(quizData) => {
+          handlePlayFromLibrarySolo(quizData, quizData.gameMode, quizData.difficulty);
+        }}
+        onPlayQuizMulti={(quizData) => {
+          handlePlayFromLibraryMulti(quizData, quizData.gameMode, quizData.difficulty);
+        }}
+      />
+
       {/* Live Statistics Footer (Only visible on non-playing screens to guarantee 0 scroll in-game) */}
       {screen !== 'playing' && (
-        <footer className="hidden sm:block relative z-10 py-1.5 sm:py-2.5 px-2 sm:px-4 text-center border-t border-white/10 backdrop-blur-md bg-black/40 shrink-0">
-          <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-7 gap-y-0.5 text-[10px] sm:text-xs text-white/70">
-            {/* Joueurs en direct */}
-            <div className="flex items-center gap-1.5">
+        <footer className="relative z-10 py-1.5 sm:py-2 px-2 sm:px-4 text-center border-t border-white/10 backdrop-blur-md bg-black/50 shrink-0">
+          <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-5 gap-y-1 text-[11px] sm:text-xs text-white/70">
+            {/* Joueurs en direct - Clickable */}
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                setStatsModalInitialTab('players');
+                setIsStatsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-xl hover:bg-white/10 hover:border-emerald-500/30 border border-transparent transition-all cursor-pointer group active:scale-95"
+              title="Cliquer pour afficher la liste des joueurs actifs et leurs salons"
+            >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="font-extrabold text-emerald-400 text-sm tracking-tight">
+              <span className="font-extrabold text-emerald-400 text-xs sm:text-sm tracking-tight group-hover:underline">
                 {globalStats.onlinePlayers.toLocaleString()}
               </span>
-              <span className="text-white/60 font-medium">
+              <span className="text-white/70 font-medium group-hover:text-white transition-colors">
                 {t('online_players_label', settings.language)}
               </span>
-            </div>
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-black px-1.5 py-0.5 rounded-md hidden md:inline border border-emerald-500/30">
+                Détails
+              </span>
+            </button>
 
             <span className="text-white/20 hidden sm:inline">•</span>
 
-            {/* Salons en cours */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm">🎮</span>
-              <span className="font-extrabold text-amber-300 text-sm tracking-tight">
+            {/* Salons en cours - Clickable */}
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                setStatsModalInitialTab('rooms');
+                setIsStatsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-xl hover:bg-white/10 hover:border-amber-500/30 border border-transparent transition-all cursor-pointer group active:scale-95"
+              title="Cliquer pour voir la liste de tous les salons actifs"
+            >
+              <span className="text-xs sm:text-sm">🎮</span>
+              <span className="font-extrabold text-amber-300 text-xs sm:text-sm tracking-tight group-hover:underline">
                 {globalStats.activeRooms.toLocaleString()}
               </span>
-              <span className="text-white/60 font-medium">
+              <span className="text-white/70 font-medium group-hover:text-white transition-colors">
                 {t('active_rooms_label', settings.language)}
               </span>
-            </div>
+              <span className="text-[9px] bg-amber-500/20 text-amber-300 font-black px-1.5 py-0.5 rounded-md hidden md:inline border border-amber-500/30">
+                Détails
+              </span>
+            </button>
 
             <span className="text-white/20 hidden sm:inline">•</span>
 
-            {/* Quiz générés au total */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm text-indigo-400">✨</span>
-              <span className="font-extrabold text-indigo-300 text-sm tracking-tight">
+            {/* Quiz générés au total - Clickable */}
+            <button
+              onClick={() => {
+                soundEngine.playClick();
+                setStatsModalInitialTab('quizzes');
+                setIsStatsModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-xl hover:bg-white/10 hover:border-purple-500/30 border border-transparent transition-all cursor-pointer group active:scale-95"
+              title="Cliquer pour afficher les 10 derniers quiz générés"
+            >
+              <span className="text-xs sm:text-sm text-purple-400">✨</span>
+              <span className="font-extrabold text-purple-300 text-xs sm:text-sm tracking-tight group-hover:underline">
                 {globalStats.totalGenerations.toLocaleString()}
               </span>
-              <span className="text-white/60 font-medium">
+              <span className="text-white/70 font-medium group-hover:text-white transition-colors">
                 {t('total_quizzes_label', settings.language)}
               </span>
-            </div>
+              <span className="text-[9px] bg-purple-500/20 text-purple-300 font-black px-1.5 py-0.5 rounded-md hidden md:inline border border-purple-500/30">
+                10 Récents
+              </span>
+            </button>
           </div>
         </footer>
       )}

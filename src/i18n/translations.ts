@@ -377,7 +377,24 @@ export const translations: Record<string, string> = {
   "source_generated": "Généré par l'IA",
   "source_invited": "Salon Invité",
   "source_imported": "Importé",
-  "source_preset": "Thème officiel"
+  "source_preset": "Thème officiel",
+  "stats_modal_title": "Activité & Statistiques Live",
+  "stats_modal_subtitle": "Surveillance en temps réel des joueurs, des salons et des quiz générés",
+  "stats_tab_players": "Joueurs Actifs",
+  "stats_tab_rooms": "Salons en Cours",
+  "stats_tab_quizzes": "10 Derniers Quiz",
+  "no_active_players": "Aucun joueur dans un salon pour le moment.",
+  "no_active_players_desc": "Crée un salon ou invite des amis pour voir les parties en direct ici.",
+  "no_active_rooms": "Aucun salon en cours actuellement.",
+  "no_active_rooms_desc": "Sois le premier à lancer un salon public ou privé !",
+  "no_recent_quizzes": "Aucun quiz généré récemment.",
+  "play_solo": "Jouer en Solo",
+  "create_room_with_quiz": "Créer un Salon",
+  "in_room_prefix": "Salon",
+  "current_topic_label": "Thème",
+  "same_device_error": "Deux joueurs ne peuvent pas se connecter à un salon avec le même appareil.",
+  "pseudo_taken_room": "Ce pseudo est déjà utilisé dans ce salon. Choisis un autre pseudo.",
+  "pseudo_taken_global": "Ce pseudo est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre."
 };
 
 export function t(key: string, _lang?: string): string {

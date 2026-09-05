@@ -26,6 +26,8 @@ interface ServerPlayer {
   isHost: boolean;
   lastScoreEarned?: number;
   answersHistory?: Record<number, { selectedOption: string; isCorrect: boolean; timeSpent: number; scoreEarned: number }>;
+  deviceId?: string;
+  joinedAt?: number;
   ws?: WebSocket;
 }
 
@@ -125,6 +127,92 @@ async function startServer() {
 
   let totalQuizGenerations = 1842;
 
+  interface RecentQuizItem {
+    id: string;
+    topic: string;
+    themeTitle: string;
+    themeBgImage?: string;
+    primaryColor?: string;
+    accentColor?: string;
+    gameMode: string;
+    difficulty: string;
+    questionCount: number;
+    createdAt: number;
+    quizData?: any;
+  }
+
+  // Pre-seed 10 high-quality quizzes so the 10 recent quizzes list is rich and instant
+  const seedThemes = [
+    { topic: 'Blind Test Rock & Metal', title: 'Légendes du Rock & Métal', mode: 'music_blind_test', diff: 'medium', color: '#dc2626', accent: '#f59e0b' },
+    { topic: 'Animés & Mangas Cultes', title: 'Héros & Univers d’Anime', mode: 'visual_blind_test', diff: 'medium', color: '#9333ea', accent: '#ec4899' },
+    { topic: 'Histoire & Grandes Découvertes', title: 'Les Mystères de l’Histoire', mode: 'quiz', diff: 'hard', color: '#0284c7', accent: '#38bdf8' },
+    { topic: 'Hits Français des Années 2000', title: 'Génération 2000 Français', mode: 'music_blind_test', diff: 'easy', color: '#16a34a', accent: '#4ade80' },
+    { topic: 'Monuments & Merveilles du Monde', title: 'Merveilles & Villes Mondiales', mode: 'visual_blind_test', diff: 'medium', color: '#ea580c', accent: '#fbbf24' },
+    { topic: 'Cinéma Culte & Blockbusters', title: 'Répliques & Chefs-d’œuvre du Cinéma', mode: 'quiz', diff: 'medium', color: '#4f46e5', accent: '#c084fc' },
+    { topic: 'Jeux Vidéo & OST Légendaires', title: 'Bandes Originales de Jeux Vidéo', mode: 'music_blind_test', diff: 'hard', color: '#059669', accent: '#34d399' },
+    { topic: 'Peintures & Chefs-d’œuvre d’Art', title: 'L’Art & les Grands Peintres', mode: 'visual_blind_test', diff: 'expert', color: '#b45309', accent: '#fde047' },
+    { topic: 'Astronomie & Conquête Spatiale', title: 'L’Univers & le Système Solaire', mode: 'quiz', diff: 'hard', color: '#312e81', accent: '#818cf8' },
+    { topic: 'Drapeaux & Capitales Rares', title: 'Géographie Mondiale & Drapeaux', mode: 'visual_blind_test', diff: 'hard', color: '#0d9488', accent: '#2dd4bf' },
+  ];
+
+  const recentGeneratedQuizzes: RecentQuizItem[] = seedThemes.map((st, i) => {
+    const fallback = generateFallbackQuiz(st.topic, st.mode as any, st.diff as any);
+    return {
+      id: `seed_quiz_${i + 1}`,
+      topic: st.topic,
+      themeTitle: st.title,
+      themeBgImage: fallback.themeBgImage,
+      primaryColor: st.color,
+      accentColor: st.accent,
+      gameMode: st.mode,
+      difficulty: st.diff,
+      questionCount: fallback.questions?.length || 15,
+      createdAt: Date.now() - (i * 8 + 3) * 60 * 1000,
+      quizData: fallback,
+    };
+  });
+
+  // Helper validation: Check if a pseudo is already taken in a specific room
+  function isPseudoTakenInRoom(room: ServerRoom, rawName: string, excludePlayerId?: string): boolean {
+    const target = (rawName || '').trim().toLowerCase();
+    if (!target) return false;
+    for (const [id, p] of room.players.entries()) {
+      if (id !== excludePlayerId && p.name.trim().toLowerCase() === target) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Helper validation: Check if a pseudo is already in use by any connected active player across all rooms
+  function isPseudoTakenGlobally(rawName: string, excludePlayerId?: string, deviceId?: string): boolean {
+    const target = (rawName || '').trim().toLowerCase();
+    if (!target) return false;
+    for (const room of activeRooms.values()) {
+      for (const [id, p] of room.players.entries()) {
+        const isSamePlayer = id === excludePlayerId || (Boolean(deviceId) && Boolean(p.deviceId) && p.deviceId === deviceId && id === excludePlayerId);
+        if (!isSamePlayer && p.name.trim().toLowerCase() === target) {
+          if (p.ws && p.ws.readyState === WebSocket.OPEN) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // Helper validation: Check if a device is already connected to this specific room
+  function isDeviceAlreadyInRoom(room: ServerRoom, deviceId?: string, excludePlayerId?: string): boolean {
+    if (!deviceId || typeof deviceId !== 'string' || !deviceId.trim()) return false;
+    const cleanDevice = deviceId.trim();
+    for (const [id, p] of room.players.entries()) {
+      if (id !== excludePlayerId && p.deviceId && p.deviceId === cleanDevice) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function getGlobalStats() {
     let roomPlayers = 0;
     activeRooms.forEach((room) => {
@@ -137,6 +225,57 @@ async function startServer() {
       onlinePlayers,
       activeRooms: activeRooms.size,
       totalGenerations: totalQuizGenerations,
+    };
+  }
+
+  function getDetailedStats() {
+    const globalStats = getGlobalStats();
+
+    const activePlayersList: Array<{
+      id: string;
+      name: string;
+      avatar: string;
+      roomCode: string;
+      isHost: boolean;
+      topic: string;
+      themeTitle: string;
+      gameMode: string;
+      status: string;
+      score: number;
+      streak: number;
+      currentQuestionIndex: number;
+      totalQuestions: number;
+      isOnline: boolean;
+    }> = [];
+
+    activeRooms.forEach((room) => {
+      room.players.forEach((p) => {
+        activePlayersList.push({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          roomCode: room.code,
+          isHost: p.isHost,
+          topic: room.topic || 'Quiz',
+          themeTitle: room.themeTitle || room.topic || 'Quiz',
+          gameMode: room.gameMode || 'quiz',
+          status: room.status,
+          score: p.score,
+          streak: p.streak,
+          currentQuestionIndex: room.currentQuestionIndex,
+          totalQuestions: room.quizData?.questions?.length || 15,
+          isOnline: !!(p.ws && p.ws.readyState === WebSocket.OPEN),
+        });
+      });
+    });
+
+    const roomsList = getPublicRoomsSummary();
+
+    return {
+      ...globalStats,
+      activePlayers: activePlayersList,
+      activeRoomsList: roomsList,
+      recentQuizzes: recentGeneratedQuizzes.slice(0, 10),
     };
   }
 
@@ -1501,6 +1640,22 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
     parsedData.topic = topic;
     totalQuizGenerations += 1;
+    recentGeneratedQuizzes.unshift({
+      id: `gen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      topic: parsedData.topic || topic,
+      themeTitle: parsedData.themeTitle || parsedData.topic || topic,
+      themeBgImage: parsedData.themeBgImage,
+      primaryColor: parsedData.primaryColor,
+      accentColor: parsedData.accentColor,
+      gameMode: parsedData.gameMode || gameMode || 'quiz',
+      difficulty: parsedData.difficulty || difficulty || 'medium',
+      questionCount: parsedData.questions?.length || 15,
+      createdAt: Date.now(),
+      quizData: parsedData,
+    });
+    if (recentGeneratedQuizzes.length > 25) {
+      recentGeneratedQuizzes.pop();
+    }
     broadcastGlobalStats();
     return res.json(parsedData);
   });
@@ -1530,6 +1685,11 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
   // Platform statistics endpoint
   app.get('/api/stats', (req, res) => {
     return res.json(getGlobalStats());
+  });
+
+  // Detailed platform statistics endpoint
+  app.get('/api/stats/details', (req, res) => {
+    return res.json(getDetailedStats());
   });
 
   // Public rooms directory endpoint
@@ -1653,7 +1813,19 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             durationPerQuestion = 20,
             isPublic = true,
             language = 'fr',
+            deviceId,
           } = data;
+
+          const cleanHostName = (hostName || '').trim() || 'Hôte';
+
+          // Ensure nickname is unique globally across active online players
+          if (isPseudoTakenGlobally(cleanHostName, undefined, deviceId)) {
+            return ws.send(JSON.stringify({
+              type: 'error',
+              message: `Le pseudo "${cleanHostName}" est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre.`,
+            }));
+          }
+
           let code = generateRoomCode();
           while (activeRooms.has(code)) {
             code = generateRoomCode();
@@ -1662,7 +1834,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           const hostId = `player_${Math.random().toString(36).substring(2, 9)}`;
           const hostPlayer: ServerPlayer = {
             id: hostId,
-            name: hostName.trim() || 'Hôte',
+            name: cleanHostName,
             avatar: avatar || '👑',
             score: 0,
             streak: 0,
@@ -1670,6 +1842,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             answeredCurrent: false,
             isHost: true,
             lastScoreEarned: 0,
+            deviceId: deviceId || undefined,
+            joinedAt: Date.now(),
             ws,
           };
 
@@ -1712,7 +1886,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
         // JOIN ROOM
         else if (type === 'join_room') {
-          const { code: rawCode, playerName = 'Joueur', avatar = '🦊', playerId: existingId } = data;
+          const { code: rawCode, playerName = 'Joueur', avatar = '🦊', playerId: existingId, deviceId } = data;
           const code = (rawCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
 
@@ -1720,19 +1894,46 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
             return ws.send(JSON.stringify({ type: 'error', message: 'Salon introuvable ou expiré.' }));
           }
 
+          const cleanPlayerName = (playerName || '').trim() || `Joueur ${room.players.size + 1}`;
+
+          // 1. Enforce device limit: two players cannot connect to the same room from the same device
+          if (deviceId && isDeviceAlreadyInRoom(room, deviceId, existingId)) {
+            return ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Deux joueurs ne peuvent pas se connecter à un même salon avec le même appareil.',
+            }));
+          }
+
+          // 2. Enforce nickname uniqueness in the room
+          if (isPseudoTakenInRoom(room, cleanPlayerName, existingId)) {
+            return ws.send(JSON.stringify({
+              type: 'error',
+              message: `Le pseudo "${cleanPlayerName}" est déjà pris dans ce salon. Merci d'en choisir un autre.`,
+            }));
+          }
+
+          // 3. Enforce nickname uniqueness globally among active players
+          if (isPseudoTakenGlobally(cleanPlayerName, existingId, deviceId)) {
+            return ws.send(JSON.stringify({
+              type: 'error',
+              message: `Le pseudo "${cleanPlayerName}" est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre.`,
+            }));
+          }
+
           let playerId = existingId;
           if (playerId && room.players.has(playerId)) {
             // Reconnecting existing player
             const player = room.players.get(playerId)!;
             player.ws = ws;
-            player.name = playerName || player.name;
+            player.name = cleanPlayerName;
             player.avatar = avatar || player.avatar;
+            if (deviceId) player.deviceId = deviceId;
           } else {
             // New player joining
             playerId = `player_${Math.random().toString(36).substring(2, 9)}`;
             const newPlayer: ServerPlayer = {
               id: playerId,
-              name: playerName.trim() || `Joueur ${room.players.size + 1}`,
+              name: cleanPlayerName,
               avatar: avatar || '🦊',
               score: 0,
               streak: 0,
@@ -1740,6 +1941,8 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
               answeredCurrent: false,
               isHost: false,
               lastScoreEarned: 0,
+              deviceId: deviceId || undefined,
+              joinedAt: Date.now(),
               ws,
             };
             room.players.set(playerId, newPlayer);
@@ -1948,7 +2151,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
         // UPDATE PLAYER PROFILE (Host or Guest)
         else if (type === 'update_player') {
-          const { code: rawCode, name, avatar, playerId } = data;
+          const { code: rawCode, name, avatar, playerId, deviceId } = data;
           const code = (rawCode || clientRoomCode || '').toUpperCase().trim();
           const room = activeRooms.get(code);
           if (!room) return;
@@ -1958,8 +2161,24 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
 
           const player = room.players.get(targetPlayerId);
           if (player) {
+            if (deviceId && !player.deviceId) {
+              player.deviceId = deviceId;
+            }
             if (name && typeof name === 'string' && name.trim()) {
-              player.name = name.trim();
+              const cleanNewName = name.trim();
+              if (isPseudoTakenInRoom(room, cleanNewName, targetPlayerId)) {
+                return ws.send(JSON.stringify({
+                  type: 'error',
+                  message: `Le pseudo "${cleanNewName}" est déjà pris dans ce salon. Merci d'en choisir un autre.`,
+                }));
+              }
+              if (isPseudoTakenGlobally(cleanNewName, targetPlayerId, player.deviceId || deviceId)) {
+                return ws.send(JSON.stringify({
+                  type: 'error',
+                  message: `Le pseudo "${cleanNewName}" est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre.`,
+                }));
+              }
+              player.name = cleanNewName;
             }
             if (avatar && typeof avatar === 'string') {
               player.avatar = avatar;
@@ -2146,6 +2365,14 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           ws.send(JSON.stringify({
             type: 'global_stats',
             stats: getGlobalStats(),
+          }));
+        }
+
+        // GET STATS DETAILS
+        else if (type === 'get_stats_details') {
+          ws.send(JSON.stringify({
+            type: 'stats_details',
+            details: getDetailedStats(),
           }));
         }
 

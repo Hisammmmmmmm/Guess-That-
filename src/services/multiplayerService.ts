@@ -1,6 +1,23 @@
-import { RoomState, RoomPlayer } from '../types';
+import { RoomState, RoomPlayer, DetailedPlatformStats } from '../types';
 
 export type MultiplayerListener = (data: any) => void;
+
+export function getOrCreateDeviceId(): string {
+  try {
+    let id = localStorage.getItem('guess_that_device_id');
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      id = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      localStorage.setItem('guess_that_device_id', id);
+    }
+    // Mirror to cookie so it stays resilient across tabs
+    try {
+      document.cookie = `guessthat_device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; SameSite=Lax`;
+    } catch {}
+    return id;
+  } catch {
+    return `dev_${Math.random().toString(36).substring(2, 11)}`;
+  }
+}
 
 class MultiplayerService {
   private ws: WebSocket | null = null;
@@ -10,6 +27,10 @@ class MultiplayerService {
   private currentPlayerId: string | null = null;
   private pendingQuizData: any = null;
   private isConnecting: boolean = false;
+
+  public getDeviceId(): string {
+    return getOrCreateDeviceId();
+  }
 
   public getCurrentRoomCode(): string | null {
     return this.currentRoomCode;
@@ -158,6 +179,7 @@ class MultiplayerService {
     this.send({
       type: 'create_room',
       ...params,
+      deviceId: getOrCreateDeviceId(),
     });
   }
 
@@ -171,6 +193,7 @@ class MultiplayerService {
     this.send({
       type: 'join_room',
       ...params,
+      deviceId: getOrCreateDeviceId(),
     });
   }
 
@@ -195,7 +218,25 @@ class MultiplayerService {
       playerId: this.currentPlayerId,
       name: params.name,
       avatar: params.avatar,
+      deviceId: getOrCreateDeviceId(),
     });
+  }
+
+  public requestStatsDetails() {
+    this.send({ type: 'get_stats_details' });
+  }
+
+  public async fetchStatsDetails(): Promise<DetailedPlatformStats | null> {
+    try {
+      const res = await fetch('/api/stats/details');
+      if (res.ok) {
+        return await res.json();
+      }
+      return null;
+    } catch (e) {
+      console.warn('Failed to fetch stats details', e);
+      return null;
+    }
   }
 
   public toggleReady(code: string, isReady: boolean) {
