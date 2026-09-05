@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { soundEngine } from '../services/soundEngine';
+import { XboxBadge } from './XboxBadge';
 
 import { t } from '../i18n/translations';
 
@@ -70,6 +71,33 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
     }
   }, [defaultAvatar]);
 
+  // Keyboard and gamepad handler for modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        soundEngine.playClick();
+        onClose();
+        return;
+      }
+      if (e.key === 'y' || e.key === 'Y') {
+        if (!isInput && onOpenPublicRooms && !isCodeLocked) {
+          e.preventDefault();
+          soundEngine.playClick();
+          onClose();
+          onOpenPublicRooms();
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, onOpenPublicRooms, isCodeLocked]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -127,15 +155,23 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                onClose();
-              }}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 transition-all cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-white/50 bg-white/5 px-2 py-1 rounded-lg border border-white/10">
+                <kbd className="font-mono text-[10px] text-white/80">Échap</kbd>
+                <XboxBadge button="B" />
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick();
+                  onClose();
+                }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 transition-all cursor-pointer"
+                title="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {(localError || errorMessage) && (
@@ -236,6 +272,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                 <span>{t('connecting_room', language)}</span>
               ) : (
                 <>
+                  <XboxBadge button="A" />
                   <span>{t('join_game', language)}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
@@ -254,6 +291,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   }}
                   className="text-xs font-bold text-purple-300 hover:text-purple-200 flex items-center gap-1.5 cursor-pointer py-1 transition-colors"
                 >
+                  <XboxBadge button="Y" />
                   <Globe2 className="w-3.5 h-3.5 text-pink-400" />
                   <span>{t('browse_public_rooms', language)}</span>
                 </button>

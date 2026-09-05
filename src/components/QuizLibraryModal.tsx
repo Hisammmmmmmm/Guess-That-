@@ -30,6 +30,7 @@ import {
 import { QuizData, GameMode, GameDifficulty, GameStyle } from '../types';
 import { quizLibraryService, SavedQuizItem } from '../services/quizLibraryService';
 import { soundEngine } from '../services/soundEngine';
+import { XboxBadge } from './XboxBadge';
 import { t } from '../i18n/translations';
 
 interface QuizLibraryModalProps {
@@ -42,6 +43,8 @@ interface QuizLibraryModalProps {
 }
 
 type FilterTab = 'all' | 'favorites' | 'history' | 'quiz' | 'music_blind_test' | 'visual_blind_test';
+
+const TABS: FilterTab[] = ['all', 'favorites', 'history', 'quiz', 'music_blind_test', 'visual_blind_test'];
 
 export const QuizLibraryModal: React.FC<QuizLibraryModalProps> = ({
   isOpen,
@@ -80,6 +83,55 @@ export const QuizLibraryModal: React.FC<QuizLibraryModalProps> = ({
       return () => unsubscribe();
     }
   }, [isOpen]);
+
+  // Keyboard and Gamepad navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      
+      if (e.key === 'Escape' || (e.key === 'Backspace' && !isInput)) {
+        e.preventDefault();
+        soundEngine.playClick();
+        if (isImportModalOpen) {
+          setIsImportModalOpen(false);
+          return;
+        }
+        if (shareItem) {
+          setShareItem(null);
+          return;
+        }
+        onClose();
+        return;
+      }
+
+      if (!isInput && (e.key === 'ArrowRight' || e.key === 'PageDown')) {
+        e.preventDefault();
+        soundEngine.playHover();
+        setActiveTab((current) => {
+          const idx = TABS.indexOf(current);
+          const nextIdx = (idx + 1) % TABS.length;
+          return TABS[nextIdx];
+        });
+        return;
+      }
+
+      if (!isInput && (e.key === 'ArrowLeft' || e.key === 'PageUp')) {
+        e.preventDefault();
+        soundEngine.playHover();
+        setActiveTab((current) => {
+          const idx = TABS.indexOf(current);
+          const nextIdx = (idx - 1 + TABS.length) % TABS.length;
+          return TABS[nextIdx];
+        });
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isImportModalOpen, shareItem, onClose]);
 
   if (!isOpen) return null;
 
@@ -316,15 +368,20 @@ export const QuizLibraryModal: React.FC<QuizLibraryModalProps> = ({
             </button>
 
             {/* Close */}
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                onClose();
-              }}
-              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white cursor-pointer transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-xl border border-white/10">
+              <kbd className="hidden sm:inline font-mono text-[10px] text-white/70">Échap</kbd>
+              <XboxBadge button="B" />
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  onClose();
+                }}
+                className="p-1 text-white/70 hover:text-white cursor-pointer transition-all"
+                title="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -359,21 +416,22 @@ export const QuizLibraryModal: React.FC<QuizLibraryModalProps> = ({
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs">
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                setActiveTab('all');
-              }}
-              className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'all'
-                  ? 'bg-purple-600 text-white shadow-md'
-                  : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <span>{t('library_all', language)}</span>
-              <span className="text-[10px] opacity-75">({quizzes.length})</span>
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar text-xs flex-1">
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  setActiveTab('all');
+                }}
+                className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'all'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <span>{t('library_all', language)}</span>
+                <span className="text-[10px] opacity-75">({quizzes.length})</span>
+              </button>
 
             <button
               onClick={() => {
@@ -452,6 +510,13 @@ export const QuizLibraryModal: React.FC<QuizLibraryModalProps> = ({
               <Eye className="w-3.5 h-3.5 text-cyan-400" />
               <span>Blind Test Visuel</span>
             </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2 text-[11px] text-white/40 shrink-0">
+              <XboxBadge button="LB" />
+              <XboxBadge button="RB" />
+              <span>Filtres</span>
+            </div>
           </div>
         </div>
 

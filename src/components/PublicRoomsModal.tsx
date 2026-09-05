@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { PublicRoomSummary } from '../types';
 import { multiplayerService } from '../services/multiplayerService';
 import { soundEngine } from '../services/soundEngine';
+import { XboxBadge } from './XboxBadge';
 import { t } from '../i18n/translations';
 
 interface PublicRoomsModalProps {
@@ -26,6 +27,13 @@ interface PublicRoomsModalProps {
   onSelectRoom: (room: PublicRoomSummary) => void;
   onOpenEnterCodeModal: () => void;
 }
+
+const MODES = [
+  { id: 'all', labelKey: 'all_modes' },
+  { id: 'music_blind_test', labelKey: 'music_blind_test' },
+  { id: 'visual_blind_test', labelKey: 'visual_blind_test' },
+  { id: 'quiz', labelKey: 'quiz' },
+];
 
 export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   language = 'fr',
@@ -37,6 +45,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   const [rooms, setRooms] = useState<PublicRoomSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedGameMode, setSelectedGameMode] = useState<string>('all');
+  const [focusedIndex, setFocusedIndex] = useState<number>(0);
 
   const fetchRooms = useCallback(async () => {
     setIsLoading(true);
@@ -91,6 +100,82 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
     };
   }, [isOpen, fetchRooms]);
 
+  // Reset or constrain focused room index when rooms change
+  useEffect(() => {
+    if (focusedIndex >= rooms.length && rooms.length > 0) {
+      setFocusedIndex(rooms.length - 1);
+    }
+  }, [rooms.length, focusedIndex]);
+
+  // Keyboard and Gamepad Navigation
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        soundEngine.playClick();
+        onClose();
+        return;
+      }
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setFocusedIndex((prev) => (rooms.length > 0 ? (prev + 1) % rooms.length : 0));
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setFocusedIndex((prev) => (rooms.length > 0 ? (prev - 1 + rooms.length) % rooms.length : 0));
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setSelectedGameMode((current) => {
+          const idx = MODES.findIndex((m) => m.id === current);
+          const nextIdx = (idx + 1) % MODES.length;
+          return MODES[nextIdx].id;
+        });
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setSelectedGameMode((current) => {
+          const idx = MODES.findIndex((m) => m.id === current);
+          const nextIdx = (idx - 1 + MODES.length) % MODES.length;
+          return MODES[nextIdx].id;
+        });
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (rooms.length > 0 && rooms[focusedIndex]) {
+          e.preventDefault();
+          handleJoinClick(rooms[focusedIndex]);
+          return;
+        }
+      }
+
+      if (e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        soundEngine.playClick();
+        onClose();
+        onOpenEnterCodeModal();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, rooms, focusedIndex, onClose, onOpenEnterCodeModal]);
+
   if (!isOpen) return null;
 
   const handleJoinClick = (room: PublicRoomSummary) => {
@@ -113,12 +198,12 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
   const getModeName = (mode: string) => {
     switch (mode) {
       case 'music_blind_test':
-        return t('music_blind_test');
+        return t('music_blind_test', language);
       case 'visual_blind_test':
-        return t('visual_blind_test');
+        return t('visual_blind_test', language);
       case 'quiz':
       default:
-        return t('quiz');
+        return t('quiz', language);
     }
   };
 
@@ -128,26 +213,26 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {t('status_lobby')}
+            {t('status_lobby', language)}
           </span>
         );
       case 'playing':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-purple-500/25 text-purple-200 border border-purple-400/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
-            {t('status_playing')} {totalQ > 0 ? `(${currentQ + 1}/${totalQ})` : ''}
+            {t('status_playing', language)} {totalQ > 0 ? `(${currentQ + 1}/${totalQ})` : ''}
           </span>
         );
       case 'question_result':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black uppercase tracking-wider">
-            {t('status_question_result')}
+            {t('status_question_result', language)}
           </span>
         );
       case 'game_over':
         return (
           <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 text-[10px] font-black uppercase tracking-wider">
-            {t('status_game_over')}
+            {t('status_game_over', language)}
           </span>
         );
       default:
@@ -186,14 +271,14 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-xl sm:text-2xl font-black text-white font-heading">
-                    {t('public_rooms')}
+                    {t('public_rooms', language)}
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase">
                     {rooms.length} {rooms.length === 1 ? 'salon' : 'salons'}
                   </span>
                 </div>
                 <p className="text-xs text-white/60 line-clamp-1">
-                  {t('public_rooms_desc')}
+                  {t('public_rooms_desc', language)}
                 </p>
               </div>
             </div>
@@ -208,21 +293,26 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 className={`p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-all cursor-pointer ${
                   isLoading ? 'animate-spin text-purple-400' : ''
                 }`}
-                title={t('refresh_rooms')}
+                title={t('refresh_rooms', language)}
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playClick();
-                  onClose();
-                }}
-                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 transition-all cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-xl border border-white/10">
+                <kbd className="hidden sm:inline font-mono text-[10px] text-white/70">Échap</kbd>
+                <XboxBadge button="B" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    onClose();
+                  }}
+                  className="p-1 text-white/60 hover:text-white transition-all cursor-pointer"
+                  title="Fermer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -232,14 +322,14 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white/60 flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-pink-400" />
-                {t('filter_by_mode')}:
+                {t('filter_by_mode', language)}:
               </span>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {[
-                  { id: 'all', label: t('all_modes') },
-                  { id: 'music_blind_test', label: t('music_blind_test'), icon: <Music2 className="w-3 h-3 text-pink-400" /> },
-                  { id: 'visual_blind_test', label: t('visual_blind_test'), icon: <Eye className="w-3 h-3 text-emerald-400" /> },
-                  { id: 'quiz', label: t('quiz'), icon: <BrainCircuit className="w-3 h-3 text-purple-400" /> },
+                  { id: 'all', label: t('all_modes', language) },
+                  { id: 'music_blind_test', label: t('music_blind_test', language), icon: <Music2 className="w-3 h-3 text-pink-400" /> },
+                  { id: 'visual_blind_test', label: t('visual_blind_test', language), icon: <Eye className="w-3 h-3 text-emerald-400" /> },
+                  { id: 'quiz', label: t('quiz', language), icon: <BrainCircuit className="w-3 h-3 text-purple-400" /> },
                 ].map((mode) => (
                   <button
                     key={mode.id}
@@ -260,6 +350,12 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 ))}
               </div>
             </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-white/40">
+              <XboxBadge button="LB" />
+              <XboxBadge button="RB" />
+              <span>Changer de filtre</span>
+            </div>
           </div>
 
           {/* Rooms Grid / List */}
@@ -267,7 +363,7 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
             {rooms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center gap-3 bg-white/5 rounded-3xl border border-white/10">
                 <Globe2 className="w-12 h-12 text-white/20" />
-                <p className="text-sm font-bold text-white/80">{t('no_public_rooms')}</p>
+                <p className="text-sm font-bold text-white/80">{t('no_public_rooms', language)}</p>
                 <button
                   type="button"
                   onClick={() => {
@@ -276,83 +372,105 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                   }}
                   className="px-4 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-xs font-bold cursor-pointer transition-all"
                 >
-                  {t('all_modes')}
+                  {t('all_modes', language)}
                 </button>
               </div>
             ) : (
-              rooms.map((room) => (
-                <div
-                  key={room.code}
-                  className="group relative flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-3xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 transition-all gap-4 shadow-lg backdrop-blur-md overflow-hidden"
-                >
-                  {/* Left info */}
-                  <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
-                    <div className="text-2xl p-2.5 rounded-2xl bg-white/10 border border-white/15 shrink-0 flex items-center justify-center shadow-inner">
-                      {room.isBotRoom ? '🤖' : room.hostAvatar || '👑'}
-                    </div>
+              rooms.map((room, idx) => {
+                const isFocused = idx === focusedIndex;
+                return (
+                  <div
+                    key={room.code}
+                    onClick={() => setFocusedIndex(idx)}
+                    className={`group relative flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-3xl transition-all gap-4 shadow-lg backdrop-blur-md overflow-hidden cursor-pointer ${
+                      isFocused
+                        ? 'bg-white/15 border-2 border-purple-400 shadow-purple-500/20 ring-2 ring-purple-500/30'
+                        : 'bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50'
+                    }`}
+                  >
+                    {/* Left info */}
+                    <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+                      <div className="text-2xl p-2.5 rounded-2xl bg-white/10 border border-white/15 shrink-0 flex items-center justify-center shadow-inner">
+                        {room.isBotRoom ? '🤖' : room.hostAvatar || '👑'}
+                      </div>
 
-                    <div className="flex flex-col gap-1 min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-extrabold text-base text-white truncate max-w-[280px] sm:max-w-md">
-                          {room.themeTitle || room.topic}
-                        </span>
-
-                        {room.isBotRoom && (
-                          <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                            <Bot className="w-3 h-3 text-amber-400" />
-                            {t('bot_room_tag')}
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-extrabold text-base text-white truncate max-w-[280px] sm:max-w-md">
+                            {room.themeTitle || room.topic}
                           </span>
-                        )}
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
-                        {/* Mode */}
-                        <span className="flex items-center gap-1 font-semibold text-white/80">
-                          {getModeIcon(room.gameMode)}
-                          {getModeName(room.gameMode)}
-                        </span>
+                          {room.isBotRoom && (
+                            <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                              <Bot className="w-3 h-3 text-amber-400" />
+                              {t('bot_room_tag', language)}
+                            </span>
+                          )}
+                        </div>
 
-                        <span>•</span>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
+                          {/* Mode */}
+                          <span className="flex items-center gap-1 font-semibold text-white/80">
+                            {getModeIcon(room.gameMode)}
+                            {getModeName(room.gameMode)}
+                          </span>
 
-                        {/* Room Code */}
-                        <span className="font-mono font-bold text-purple-300 tracking-wider">
-                          #{room.code}
-                        </span>
+                          <span>•</span>
 
-                        <span>•</span>
+                          {/* Room Code */}
+                          <span className="font-mono font-bold text-purple-300 tracking-wider">
+                            #{room.code}
+                          </span>
 
-                        {/* Player Count */}
-                        <span className="flex items-center gap-1 font-medium">
-                          <Users className="w-3 h-3 text-white/50" />
-                          {room.playerCount}/{room.maxPlayers || 8} {t('players')}
-                        </span>
+                          <span>•</span>
+
+                          {/* Player Count */}
+                          <span className="flex items-center gap-1 font-medium">
+                            <Users className="w-3 h-3 text-white/50" />
+                            {room.playerCount}/{room.maxPlayers || 8} {t('players', language)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Right Status & Join Button */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
-                    <div>{getStatusBadge(room.status, room.currentQuestionIndex, room.totalQuestions)}</div>
+                    {/* Right Status & Join Button */}
+                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
+                      <div>{getStatusBadge(room.status, room.currentQuestionIndex, room.totalQuestions)}</div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleJoinClick(room)}
-                      className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-purple-900/30 cursor-pointer transition-all transform hover:scale-105 active:scale-95 shrink-0"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>{t('join_action')}</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleJoinClick(room);
+                        }}
+                        className={`px-5 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-purple-900/30 cursor-pointer transition-all transform active:scale-95 shrink-0 ${
+                          isFocused ? 'scale-105 ring-2 ring-white/50' : 'hover:scale-105'
+                        }`}
+                      >
+                        <XboxBadge button="A" />
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>{t('join_action', language)}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
           {/* Footer Action Switcher */}
           <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="text-xs text-white/50 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>{t('step1_desc')}</span>
+            <div className="text-xs text-white/50 flex items-center gap-2">
+              <span className="flex items-center gap-1">
+                <XboxBadge button="UP" />
+                <XboxBadge button="DOWN" />
+                <span>Naviguer</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <XboxBadge button="A" />
+                <span>Rejoindre</span>
+              </span>
             </div>
 
             <button
@@ -362,9 +480,10 @@ export const PublicRoomsModal: React.FC<PublicRoomsModalProps> = ({
                 onClose();
                 onOpenEnterCodeModal();
               }}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/15 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/15 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer active:scale-95"
             >
-              <span>{t('enter_code_btn')}</span>
+              <XboxBadge button="X" />
+              <span>{t('enter_code_btn', language)}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

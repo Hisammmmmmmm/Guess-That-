@@ -23,6 +23,7 @@ import {
 import { DetailedPlatformStats, ActivePlayerDetail, RecentQuizDetail, PublicRoomSummary } from '../types';
 import { t } from '../i18n/translations';
 import { soundEngine } from '../services/soundEngine';
+import { XboxBadge } from './XboxBadge';
 
 interface StatsDetailModalProps {
   isOpen: boolean;
@@ -33,6 +34,8 @@ interface StatsDetailModalProps {
   onPlayQuizSolo?: (quizData: any, gameMode?: any, difficulty?: any) => void;
   onPlayQuizMulti?: (quizData: any, gameMode?: any, difficulty?: any) => void;
 }
+
+const TABS: Array<'players' | 'rooms' | 'quizzes'> = ['players', 'rooms', 'quizzes'];
 
 export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
   isOpen,
@@ -54,6 +57,45 @@ export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
       setActiveTab(initialTab);
     }
   }, [isOpen, initialTab]);
+
+  // Keyboard and gamepad handler
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        soundEngine.playClick();
+        onClose();
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setActiveTab((current) => {
+          const idx = TABS.indexOf(current);
+          const nextIdx = (idx + 1) % TABS.length;
+          return TABS[nextIdx];
+        });
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        soundEngine.playHover();
+        setActiveTab((current) => {
+          const idx = TABS.indexOf(current);
+          const nextIdx = (idx - 1 + TABS.length) % TABS.length;
+          return TABS[nextIdx];
+        });
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const fetchDetails = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
@@ -237,82 +279,94 @@ export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
                 <span className="hidden sm:inline">Actualiser</span>
               </button>
 
-              <button
-                onClick={() => {
-                  soundEngine.playClick();
-                  onClose();
-                }}
-                className="p-2 sm:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 transition-all cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-xl border border-white/10">
+                <kbd className="hidden sm:inline font-mono text-[10px] text-white/70">Échap</kbd>
+                <XboxBadge button="B" />
+                <button
+                  onClick={() => {
+                    soundEngine.playClick();
+                    onClose();
+                  }}
+                  className="p-1 text-white/60 hover:text-white transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1.5 sm:gap-2 p-1 bg-black/40 rounded-2xl border border-white/10 shrink-0">
-            {/* Tab 1: Joueurs Actifs */}
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                setActiveTab('players');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                activeTab === 'players'
-                  ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-md border border-emerald-400/40'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Users className="w-4 h-4 text-emerald-400" />
-              <span>{t('stats_tab_players', language)}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'players' ? 'bg-black/40 text-emerald-200' : 'bg-white/10 text-white/70'
-              }`}>
-                {playersList.length}
-              </span>
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+            <div className="flex-1 flex items-center gap-1.5 sm:gap-2 p-1 bg-black/40 rounded-2xl border border-white/10">
+              {/* Tab 1: Joueurs Actifs */}
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  setActiveTab('players');
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  activeTab === 'players'
+                    ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-md border border-emerald-400/40'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>{t('stats_tab_players', language)}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === 'players' ? 'bg-black/40 text-emerald-200' : 'bg-white/10 text-white/70'
+                }`}>
+                  {playersList.length}
+                </span>
+              </button>
 
-            {/* Tab 2: Salons en Cours */}
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                setActiveTab('rooms');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                activeTab === 'rooms'
-                  ? 'bg-gradient-to-r from-amber-600/80 to-orange-600/80 text-white shadow-md border border-amber-400/40'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Gamepad2 className="w-4 h-4 text-amber-300" />
-              <span>{t('stats_tab_rooms', language)}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'rooms' ? 'bg-black/40 text-amber-200' : 'bg-white/10 text-white/70'
-              }`}>
-                {roomsList.length}
-              </span>
-            </button>
+              {/* Tab 2: Salons en Cours */}
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  setActiveTab('rooms');
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  activeTab === 'rooms'
+                    ? 'bg-gradient-to-r from-amber-600/80 to-orange-600/80 text-white shadow-md border border-amber-400/40'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Gamepad2 className="w-4 h-4 text-amber-300" />
+                <span>{t('stats_tab_rooms', language)}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === 'rooms' ? 'bg-black/40 text-amber-200' : 'bg-white/10 text-white/70'
+                }`}>
+                  {roomsList.length}
+                </span>
+              </button>
 
-            {/* Tab 3: 10 Derniers Quiz */}
-            <button
-              onClick={() => {
-                soundEngine.playClick();
-                setActiveTab('quizzes');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                activeTab === 'quizzes'
-                  ? 'bg-gradient-to-r from-purple-600/80 to-indigo-600/80 text-white shadow-md border border-purple-400/40'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-purple-300" />
-              <span>{t('stats_tab_quizzes', language)}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                activeTab === 'quizzes' ? 'bg-black/40 text-purple-200' : 'bg-white/10 text-white/70'
-              }`}>
-                {recentQuizzes.length}
-              </span>
-            </button>
+              {/* Tab 3: 10 Derniers Quiz */}
+              <button
+                onClick={() => {
+                  soundEngine.playClick();
+                  setActiveTab('quizzes');
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+                  activeTab === 'quizzes'
+                    ? 'bg-gradient-to-r from-purple-600/80 to-indigo-600/80 text-white shadow-md border border-purple-400/40'
+                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-purple-300" />
+                <span>{t('stats_tab_quizzes', language)}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === 'quizzes' ? 'bg-black/40 text-purple-200' : 'bg-white/10 text-white/70'
+                }`}>
+                  {recentQuizzes.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 px-2 text-[11px] text-white/40">
+              <XboxBadge button="LB" />
+              <XboxBadge button="RB" />
+              <span>Changer d'onglet</span>
+            </div>
           </div>
 
           {/* Tab Content Container */}

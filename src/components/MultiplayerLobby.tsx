@@ -15,12 +15,14 @@ import {
   X,
   Globe,
   RotateCcw,
+  RefreshCw,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { RoomState, RoomPlayer } from '../types';
 import { soundEngine } from '../services/soundEngine';
 import { quizLibraryService } from '../services/quizLibraryService';
+import { XboxBadge } from './XboxBadge';
 import { t } from '../i18n/translations';
 
 interface MultiplayerLobbyProps {
@@ -37,6 +39,7 @@ interface MultiplayerLobbyProps {
   onPlayClickSound?: () => void;
   onUpdateProfile?: (name: string, avatar: string) => void;
   onTogglePublic?: (isPublic: boolean) => void;
+  onRefreshRoom?: () => void;
   floatingReactions?: { id: string; emoji: string; name: string }[];
 }
 
@@ -57,11 +60,13 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   onPlayClickSound,
   onUpdateProfile,
   onTogglePublic,
+  onRefreshRoom,
   floatingReactions = [],
 }) => {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const currentPlayer = roomState.players?.[currentPlayerId];
@@ -90,6 +95,75 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   const isHost = roomState.hostId === currentPlayerId;
   const questionsCount = roomState.quizData?.questions?.length || 0;
   const isReadyToPlay = !isQuizGenerating && questionsCount > 0;
+
+  // Global Keyboard & Gamepad navigation in room lobby
+  useEffect(() => {
+    const handleLobbyKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || isEditingProfile) {
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (isHost && isReadyToPlay) {
+          e.preventDefault();
+          soundEngine.playStartGame();
+          onStartGame();
+        }
+        return;
+      }
+      if (k === 'r' || k === 'y') {
+        if (onRefreshRoom) {
+          e.preventDefault();
+          soundEngine.playClick();
+          setIsRefreshing(true);
+          onRefreshRoom();
+          setTimeout(() => setIsRefreshing(false), 800);
+        }
+        return;
+      }
+      if (k === 'p' || k === 'x') {
+        if (isHost && onTogglePublic) {
+          e.preventDefault();
+          soundEngine.playClick();
+          onTogglePublic(!roomState.isPublic);
+        }
+        return;
+      }
+    };
+
+    const handleGamepadAction = (e: any) => {
+      if (isEditingProfile) return;
+      const action = e.detail?.button || e.detail?.action;
+      if (action === 'A' || action === 'START') {
+        if (isHost && isReadyToPlay) {
+          soundEngine.playStartGame();
+          onStartGame();
+        }
+      } else if (action === 'B') {
+        soundEngine.playClick();
+        onLeaveRoom();
+      } else if (action === 'Y') {
+        if (onRefreshRoom) {
+          soundEngine.playClick();
+          setIsRefreshing(true);
+          onRefreshRoom();
+          setTimeout(() => setIsRefreshing(false), 800);
+        }
+      } else if (action === 'X') {
+        if (isHost && onTogglePublic) {
+          soundEngine.playClick();
+          onTogglePublic(!roomState.isPublic);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleLobbyKeyDown);
+    window.addEventListener('gamepad-action', handleGamepadAction);
+    return () => {
+      window.removeEventListener('keydown', handleLobbyKeyDown);
+      window.removeEventListener('gamepad-action', handleGamepadAction);
+    };
+  }, [isHost, isReadyToPlay, onStartGame, onLeaveRoom, onRefreshRoom, onTogglePublic, roomState.isPublic, isEditingProfile]);
 
   // Auto-save quiz data to library when loaded in lobby
   useEffect(() => {
@@ -174,9 +248,31 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           <span>{t('quit_room', language)}</span>
         </button>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
-          <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-          <span>{t('live_multiplayer_lobby', language)}</span>
+        <div className="flex items-center gap-2">
+          {onRefreshRoom && (
+            <button
+              id="btn-refresh-lobby-top"
+              type="button"
+              onClick={() => {
+                soundEngine.playClick();
+                setIsRefreshing(true);
+                onRefreshRoom();
+                setTimeout(() => setIsRefreshing(false), 800);
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/5 hover:bg-purple-500/20 text-purple-300 hover:text-white border border-white/15 text-xs font-bold transition-all cursor-pointer backdrop-blur-md"
+              title="Rafraîchir le salon (Touche R / Y)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Rafraîchir</span>
+              <kbd className="hidden md:inline px-1 py-0.2 rounded bg-black/40 border border-white/20 text-[9px] font-mono text-white/60">R</kbd>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-[11px] font-black uppercase tracking-wider backdrop-blur-md">
+            <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+            <span className="hidden xs:inline">{t('live_multiplayer_lobby', language)}</span>
+            <span className="xs:hidden">Salon En Direct</span>
+          </div>
         </div>
       </div>
 
@@ -371,6 +467,22 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 <span className="text-xs font-bold text-white">
                   {t('players_in_room', language)} ({playersList.length})
                 </span>
+                {onRefreshRoom && (
+                  <button
+                    id="btn-refresh-lobby-players"
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setIsRefreshing(true);
+                      onRefreshRoom();
+                      setTimeout(() => setIsRefreshing(false), 800);
+                    }}
+                    className="p-1 sm:p-1.5 rounded-lg bg-white/10 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-white/15 transition-all cursor-pointer flex items-center justify-center ml-1"
+                    title="Rafraîchir le salon (Touche R / Y)"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-white/50 hidden sm:inline">
@@ -480,7 +592,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 }}
                 disabled={!isReadyToPlay}
                 id="btn-start-multiplayer-game"
-                className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer transform active:scale-98 ${
+                className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer transform active:scale-98 focus:outline-none focus:ring-2 focus:ring-purple-400 ${
                   isReadyToPlay
                     ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-500 hover:via-pink-500 hover:to-amber-400 shadow-[0_0_25px_rgba(168,85,247,0.4)] hover:scale-[1.01]'
                     : 'bg-gray-700/50 border border-white/10 opacity-70 cursor-not-allowed'
@@ -490,6 +602,10 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   <>
                     <Play className="w-4 h-4 fill-current text-white" />
                     <span>{t('start_game_players', language)} ({playersList.length} {playersList.length > 1 ? t('players', language).toLowerCase() : t('player', language).toLowerCase()})</span>
+                    <div className="flex items-center gap-1.5 ml-2">
+                      <kbd className="hidden xs:inline px-1.5 py-0.5 rounded bg-black/40 border border-white/30 text-[10px] font-mono font-bold text-white shadow-inner">Entrée</kbd>
+                      <XboxBadge button="A" />
+                    </div>
                   </>
                 ) : (
                   <>

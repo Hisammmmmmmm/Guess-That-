@@ -394,7 +394,24 @@ export const translations: Record<string, string> = {
   "current_topic_label": "Thème",
   "same_device_error": "Deux joueurs ne peuvent pas se connecter à un salon avec le même appareil.",
   "pseudo_taken_room": "Ce pseudo est déjà utilisé dans ce salon. Choisis un autre pseudo.",
-  "pseudo_taken_global": "Ce pseudo est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre."
+  "pseudo_taken_global": "Ce pseudo est déjà utilisé par un joueur en ligne. Veuillez en choisir un autre.",
+  "tab_settings": "Paramètres Audio & Profil",
+  "tab_tutorial": "Tutoriel & Commandes Clavier",
+  "tutorial_title": "Comment jouer à Guess That ?",
+  "tutorial_subtitle": "Guide complet du jeu, astuces et raccourcis clavier",
+  "keyboard_shortcuts_title": "Commandes Clavier Complètes",
+  "keyboard_shortcuts_subtitle": "Contrôlez 100% du jeu sans jamais toucher à la souris !",
+  "shortcut_abcd": "Choisir une réponse directement",
+  "shortcut_arrows": "Naviguer entre les 4 propositions ou dans les menus",
+  "shortcut_enter": "Valider la sélection / Passer à la question suivante / Valider",
+  "shortcut_escape": "Fermer les fenêtres / Retour arrière / Quitter la partie",
+  "shortcut_options": "Ouvrir ou fermer le menu Options & Tutoriel",
+  "shortcut_tutorial": "Ouvrir directement ce Tutoriel d'aide",
+  "shortcut_mute": "Couper / Réactiver la musique et les sons (Mute)",
+  "shortcut_library": "Ouvrir la Bibliothèque de Quiz (sur l'accueil)",
+  "shortcut_join": "Rejoindre un salon multijoueur avec code (sur l'accueil)",
+  "shortcut_stats": "Ouvrir les statistiques live de la plateforme",
+  "shortcut_space": "Valider le choix / Question suivante / Pause"
 };
 
 export function t(key: string, _lang?: string): string {

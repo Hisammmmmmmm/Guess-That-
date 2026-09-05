@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, ArrowRight, Lightbulb, Zap, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Question } from '../types';
@@ -36,11 +36,31 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   autoAdvanceCountdown,
   isHost = true,
 }) => {
-  // Listen for keyboard shortcuts 1, 2, 3, 4 or A, B, C, D
+  const [focusedIndex, setFocusedIndex] = useState<number>(0);
+
+  // Reset keyboard focus to first choice whenever question changes
+  useEffect(() => {
+    setFocusedIndex(0);
+  }, [question.id, question.question]);
+
+  // Listen for keyboard navigation: Arrows, Enter, Space, A/B/C/D, 1/2/3/4
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (gameStyle === 'slideshow') return; // Disable keyboard shortcuts in slideshow mode
+      // Don't intercept if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
 
+      if (gameStyle === 'slideshow') {
+        if (e.key.startsWith('Arrow')) e.preventDefault();
+        return;
+      }
+
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+      }
+
+      // After question is answered: Enter or Space advances to next question
       if (isAnswered || selectedOption) {
         if (isHost && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
@@ -50,20 +70,83 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       }
 
       const key = e.key.toLowerCase();
-      let index = -1;
-      if (key === '1' || key === 'a') index = 0;
-      else if (key === '2' || key === 'b') index = 1;
-      else if (key === '3' || key === 'c') index = 2;
-      else if (key === '4' || key === 'd') index = 3;
 
-      if (index >= 0 && index < question.options.length) {
-        onSelectOption(question.options[index]);
+      // Direct selection via ABCD or 1234
+      let directIndex = -1;
+      if (key === '1' || key === 'a') directIndex = 0;
+      else if (key === '2' || key === 'b') directIndex = 1;
+      else if (key === '3' || key === 'c') directIndex = 2;
+      else if (key === '4' || key === 'd') directIndex = 3;
+
+      if (directIndex >= 0 && directIndex < question.options.length) {
+        e.preventDefault();
+        setFocusedIndex(directIndex);
+        onSelectOption(question.options[directIndex]);
+        return;
+      }
+
+      // Directional arrow navigation
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        onHoverSound?.();
+        setFocusedIndex((prev) => {
+          if (prev === 0) return 1;
+          if (prev === 1) return 0;
+          if (prev === 2) return 3;
+          if (prev === 3) return 2;
+          return 0;
+        });
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        onHoverSound?.();
+        setFocusedIndex((prev) => {
+          if (prev === 1) return 0;
+          if (prev === 0) return 1;
+          if (prev === 3) return 2;
+          if (prev === 2) return 3;
+          return 0;
+        });
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        onHoverSound?.();
+        setFocusedIndex((prev) => {
+          if (prev === 0) return 2;
+          if (prev === 1) return 3;
+          if (prev === 2) return 0;
+          if (prev === 3) return 1;
+          return 0;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        onHoverSound?.();
+        setFocusedIndex((prev) => {
+          if (prev === 2) return 0;
+          if (prev === 3) return 1;
+          if (prev === 0) return 2;
+          if (prev === 1) return 3;
+          return 0;
+        });
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (focusedIndex >= 0 && focusedIndex < question.options.length) {
+          onSelectOption(question.options[focusedIndex]);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isAnswered, selectedOption, question.options, onSelectOption, onNextQuestion, isHost, gameStyle]);
+  }, [
+    isAnswered,
+    selectedOption,
+    question.options,
+    focusedIndex,
+    onSelectOption,
+    onNextQuestion,
+    isHost,
+    gameStyle,
+    onHoverSound,
+  ]);
 
   const optionLetters = ['A', 'B', 'C', 'D'];
   const isLocked = isAnswered || Boolean(selectedOption);
@@ -76,12 +159,17 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           const letter = optionLetters[idx] || `${idx + 1}`;
           const isSelected = selectedOption === option;
           const isCorrect = option === question.correctAnswer;
+          const isKeyboardFocused = !isLocked && focusedIndex === idx && gameStyle !== 'slideshow';
 
           let btnClasses = gameStyle === 'slideshow' 
             ? 'border-white/15 bg-white/5 text-white shadow-sm backdrop-blur-md pointer-events-none'
+            : isKeyboardFocused
+            ? 'border-2 border-purple-400 bg-purple-500/25 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] ring-2 ring-purple-400/50 scale-[1.01]'
             : 'border-white/15 bg-white/5 hover:bg-white/10 hover:border-purple-400/50 text-white shadow-sm backdrop-blur-md';
           let radioCircle = gameStyle === 'slideshow'
             ? 'border-white/30 text-white/70'
+            : isKeyboardFocused
+            ? 'border-purple-300 bg-purple-500 text-white font-black shadow-sm'
             : 'border-white/30 text-white/70 group-hover:border-purple-400 group-hover:text-purple-300';
 
           if (!isAnswered && isSelected) {
@@ -110,7 +198,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
               key={idx}
               id={`option-btn-${idx}`}
               onClick={() => !isLocked && gameStyle !== 'slideshow' && onSelectOption(option)}
-              onMouseEnter={() => !isLocked && onHoverSound?.()}
+              onMouseEnter={() => {
+                if (!isLocked) {
+                  setFocusedIndex(idx);
+                  onHoverSound?.();
+                }
+              }}
               disabled={isLocked || gameStyle === 'slideshow'}
               className={`group relative min-h-[34px] sm:min-h-[44px] border rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1 sm:py-2 flex items-center justify-between transition-all duration-150 text-left ${btnClasses} ${
                 !isLocked && gameStyle !== 'slideshow' ? 'cursor-pointer active:scale-[0.98] transform hover:scale-[1.005]' : ''
@@ -118,7 +211,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             >
               <div className="flex items-center gap-1.5 sm:gap-2.5 pr-1 min-w-0 flex-1">
                 <span
-                  className={`${isLocked ? 'w-4 h-4 sm:w-5 sm:h-5 text-[9px] sm:text-[10px]' : 'w-4 h-4 sm:w-5 sm:h-5 text-[10px] sm:text-xs'} rounded-full flex items-center justify-center font-bold border transition-colors shrink-0 ${radioCircle}`}
+                  className={`${isLocked ? 'w-4 h-4 sm:w-5 sm:h-5 text-[9px] sm:text-[10px]' : 'w-4 h-4 sm:w-5 sm:h-5 text-[10px] sm:text-xs'} rounded-lg sm:rounded-xl flex items-center justify-center font-mono font-black border transition-colors shrink-0 ${radioCircle}`}
                 >
                   {letter}
                 </span>
@@ -127,8 +220,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 </span>
               </div>
 
-              {/* Status Indicator */}
-              <div className="shrink-0">
+              {/* Status Indicator / Enter Key Hint */}
+              <div className="shrink-0 flex items-center gap-1">
+                {isKeyboardFocused && !isLocked && (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-purple-200 bg-purple-900/60 px-2 py-0.5 rounded-md border border-purple-400/40">
+                    ↵
+                  </span>
+                )}
                 {isAnswered && isCorrect && (
                   <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-300 animate-bounce" />
                 )}
@@ -140,6 +238,34 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           );
         })}
       </div>
+
+      {/* Keyboard Shortcuts Helper Bar during Question */}
+      {gameStyle !== 'slideshow' && !isAnswered && !selectedOption && (
+        <div className="hidden sm:flex items-center justify-center gap-3 text-[10px] font-medium text-white/50 bg-black/30 backdrop-blur-md py-1 px-3 rounded-full border border-white/10 w-fit mx-auto">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.2 rounded bg-white/10 text-white font-mono font-bold">A</kbd>
+            <kbd className="px-1.5 py-0.2 rounded bg-white/10 text-white font-mono font-bold">B</kbd>
+            <kbd className="px-1.5 py-0.2 rounded bg-white/10 text-white font-mono font-bold">C</kbd>
+            <kbd className="px-1.5 py-0.2 rounded bg-white/10 text-white font-mono font-bold">D</kbd>
+            <span className="ml-0.5">Répondre</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.2 rounded bg-white/10 text-white font-mono font-bold">← ↑ ↓ →</kbd>
+            <span className="ml-0.5">Viser</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.2 rounded bg-emerald-600/40 text-emerald-300 font-mono font-bold border border-emerald-500/30">Entrée ↵</kbd>
+            <span className="ml-0.5">Valider</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.2 rounded bg-pink-600/40 text-pink-300 font-mono font-bold border border-pink-500/30">O</kbd>
+            <span className="ml-0.5">Options</span>
+          </span>
+        </div>
+      )}
 
       {/* Answer Explanation & Next Question Drawer */}
       <AnimatePresence>
