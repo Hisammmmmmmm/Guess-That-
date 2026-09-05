@@ -82,7 +82,6 @@ export interface RoomPlayer {
   selectedOption?: string;
   timeSpent?: number;
   isHost: boolean;
-  isOnline?: boolean;
   lastScoreEarned?: number;
   answersHistory?: Record<number, { selectedOption: string; isCorrect: boolean; timeSpent: number; scoreEarned: number }>;
 }
