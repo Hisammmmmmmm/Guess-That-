@@ -2330,11 +2330,15 @@ export default function App() {
           setIsJoinModalCodeLocked(true);
           setIsJoinModalOpen(true);
         }}
-        onPlayQuizSolo={(quizData) => {
-          handlePlayFromLibrarySolo(quizData, quizData.gameMode, quizData.difficulty);
+        onPlayQuizSolo={(quizData, mode, diff) => {
+          const finalMode = (mode || quizData?.gameMode || 'quiz') as GameMode;
+          const finalDiff = (diff || quizData?.difficulty || 'medium') as GameDifficulty;
+          handlePlayFromLibrarySolo(quizData, finalMode, finalDiff);
         }}
-        onPlayQuizMulti={(quizData) => {
-          handlePlayFromLibraryMulti(quizData, quizData.gameMode, quizData.difficulty);
+        onPlayQuizMulti={(quizData, mode, diff) => {
+          const finalMode = (mode || quizData?.gameMode || 'quiz') as GameMode;
+          const finalDiff = (diff || quizData?.difficulty || 'medium') as GameDifficulty;
+          handlePlayFromLibraryMulti(quizData, finalMode, finalDiff);
         }}
       />
 

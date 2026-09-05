@@ -157,6 +157,11 @@ async function startServer() {
 
   const recentGeneratedQuizzes: RecentQuizItem[] = seedThemes.map((st, i) => {
     const fallback = generateFallbackQuiz(st.topic, st.mode as any, st.diff as any);
+    const enrichedQuizData = {
+      ...fallback,
+      gameMode: st.mode,
+      difficulty: st.diff,
+    };
     return {
       id: `seed_quiz_${i + 1}`,
       topic: st.topic,
@@ -168,7 +173,7 @@ async function startServer() {
       difficulty: st.diff,
       questionCount: fallback.questions?.length || 15,
       createdAt: Date.now() - (i * 8 + 3) * 60 * 1000,
-      quizData: fallback,
+      quizData: enrichedQuizData,
     };
   });
 
@@ -1639,6 +1644,10 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
     }
 
     parsedData.topic = topic;
+    const resolvedMode = (parsedData.gameMode || gameMode || 'quiz') as string;
+    const resolvedDiff = (parsedData.difficulty || difficulty || 'medium') as string;
+    parsedData.gameMode = resolvedMode;
+    parsedData.difficulty = resolvedDiff;
     totalQuizGenerations += 1;
     recentGeneratedQuizzes.unshift({
       id: `gen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -1647,11 +1656,11 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
       themeBgImage: parsedData.themeBgImage,
       primaryColor: parsedData.primaryColor,
       accentColor: parsedData.accentColor,
-      gameMode: parsedData.gameMode || gameMode || 'quiz',
-      difficulty: parsedData.difficulty || difficulty || 'medium',
+      gameMode: resolvedMode as any,
+      difficulty: resolvedDiff as any,
       questionCount: parsedData.questions?.length || 15,
       createdAt: Date.now(),
-      quizData: parsedData,
+      quizData: { ...parsedData, gameMode: resolvedMode, difficulty: resolvedDiff },
     });
     if (recentGeneratedQuizzes.length > 25) {
       recentGeneratedQuizzes.pop();

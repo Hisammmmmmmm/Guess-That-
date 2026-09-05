@@ -30,8 +30,8 @@ interface StatsDetailModalProps {
   initialTab?: 'players' | 'rooms' | 'quizzes';
   language: string;
   onJoinRoom?: (code: string) => void;
-  onPlayQuizSolo?: (quizData: any) => void;
-  onPlayQuizMulti?: (quizData: any) => void;
+  onPlayQuizSolo?: (quizData: any, gameMode?: any, difficulty?: any) => void;
+  onPlayQuizMulti?: (quizData: any, gameMode?: any, difficulty?: any) => void;
 }
 
 export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
@@ -553,7 +553,14 @@ export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
                             onClick={() => {
                               soundEngine.playClick();
                               onClose();
-                              onPlayQuizSolo(quiz.quizData);
+                              const effectiveMode = quiz.gameMode || quiz.quizData?.gameMode || 'quiz';
+                              const effectiveDiff = quiz.difficulty || quiz.quizData?.difficulty || 'medium';
+                              const preparedData = {
+                                ...quiz.quizData,
+                                gameMode: effectiveMode,
+                                difficulty: effectiveDiff,
+                              };
+                              onPlayQuizSolo(preparedData, effectiveMode, effectiveDiff);
                             }}
                             className="px-2.5 py-1.5 rounded-xl bg-purple-600/70 hover:bg-purple-600 text-white text-xs font-bold border border-purple-400/40 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                             title="Lancer ce quiz en Solo"
@@ -568,7 +575,14 @@ export const StatsDetailModal: React.FC<StatsDetailModalProps> = ({
                             onClick={() => {
                               soundEngine.playClick();
                               onClose();
-                              onPlayQuizMulti(quiz.quizData);
+                              const effectiveMode = quiz.gameMode || quiz.quizData?.gameMode || 'quiz';
+                              const effectiveDiff = quiz.difficulty || quiz.quizData?.difficulty || 'medium';
+                              const preparedData = {
+                                ...quiz.quizData,
+                                gameMode: effectiveMode,
+                                difficulty: effectiveDiff,
+                              };
+                              onPlayQuizMulti(preparedData, effectiveMode, effectiveDiff);
                             }}
                             className="px-2.5 py-1.5 rounded-xl bg-indigo-600/70 hover:bg-indigo-600 text-white text-xs font-bold border border-indigo-400/40 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                             title="Créer un salon avec ce quiz"

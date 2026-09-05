@@ -818,23 +818,62 @@ export function generateDynamicFallbackQuiz(
   const isSeries = lower.includes('série') || lower.includes('serie') || lower.includes('tv') || lower.includes('netflix') || lower.includes('streaming');
   const isWorld = lower.includes('monde') || lower.includes('voyage') || lower.includes('monument') || lower.includes('histoire') || lower.includes('géographie') || lower.includes('pays') || lower.includes('capitale');
 
+  const effectiveMode = (gameMode || 'quiz') as any;
+  const effectiveDiff = (difficulty || 'medium') as any;
+
   if (isCinema) {
-    return { ...PRESET_QUIZ_DATA.cinema, topic: cleanTopic };
+    return { ...PRESET_QUIZ_DATA.cinema, topic: cleanTopic, gameMode: effectiveMode, difficulty: effectiveDiff };
   }
   if (isGaming) {
-    return { ...PRESET_QUIZ_DATA.gaming, topic: cleanTopic };
+    return { ...PRESET_QUIZ_DATA.gaming, topic: cleanTopic, gameMode: effectiveMode, difficulty: effectiveDiff };
   }
   if (isAnimes) {
-    return { ...PRESET_QUIZ_DATA.animes, topic: cleanTopic, questions: ANIMES_QUESTIONS };
+    return {
+      ...(PRESET_QUIZ_DATA.animes || PRESET_QUIZ_DATA.cinema),
+      topic: cleanTopic,
+      themeTitle: 'Animés & Mangas Cultes',
+      questions: ANIMES_QUESTIONS.map((q) => ({
+        ...q,
+        imageUrl: q.imageUrl || `https://image.pollinations.ai/prompt/${encodeURIComponent(q.correctAnswer + ' anime hero artwork') }?width=800&height=450&nologo=true`,
+        imagePrompt: q.imagePrompt || `${q.correctAnswer} anime hero artwork`,
+      })),
+      gameMode: effectiveMode,
+      difficulty: effectiveDiff,
+    };
   }
   if (isMusic) {
-    return { ...PRESET_QUIZ_DATA.music, topic: cleanTopic, questions: MUSIC_QUESTIONS };
+    return {
+      ...(PRESET_QUIZ_DATA.music || PRESET_QUIZ_DATA.cinema),
+      topic: cleanTopic,
+      themeTitle: 'Légendes de la Musique',
+      questions: MUSIC_QUESTIONS,
+      gameMode: effectiveMode,
+      difficulty: effectiveDiff,
+    };
   }
   if (isSeries) {
-    return { ...PRESET_QUIZ_DATA.series, topic: cleanTopic, questions: SERIES_QUESTIONS };
+    return {
+      ...(PRESET_QUIZ_DATA.series || PRESET_QUIZ_DATA.cinema),
+      topic: cleanTopic,
+      themeTitle: 'Séries TV & Streaming Cultes',
+      questions: SERIES_QUESTIONS,
+      gameMode: effectiveMode,
+      difficulty: effectiveDiff,
+    };
   }
   if (isWorld) {
-    return { ...PRESET_QUIZ_DATA.world, topic: cleanTopic, questions: WORLD_QUESTIONS };
+    return {
+      ...(PRESET_QUIZ_DATA.world || PRESET_QUIZ_DATA.cinema),
+      topic: cleanTopic,
+      themeTitle: 'Merveilles du Monde & Voyages',
+      questions: WORLD_QUESTIONS.map((q) => ({
+        ...q,
+        imageUrl: q.imageUrl || `https://image.pollinations.ai/prompt/${encodeURIComponent(q.correctAnswer + ' landmark photo') }?width=800&height=450&nologo=true`,
+        imagePrompt: q.imagePrompt || `${q.correctAnswer} landmark photo`,
+      })),
+      gameMode: effectiveMode,
+      difficulty: effectiveDiff,
+    };
   }
 
   // 15 tailored questions for any custom topic
@@ -875,6 +914,7 @@ export function generateDynamicFallbackQuiz(
       qText = `À quel thème, scène ou morceau de "${cleanTopic}" correspond cet extrait audio ?`;
     }
 
+    const visualImgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(asp.ans + ' ' + cleanTopic + ' illustration photo')}?width=800&height=450&nologo=true`;
     return {
       id: idx + 1,
       question: qText,
@@ -884,7 +924,8 @@ export function generateDynamicFallbackQuiz(
       wikiSearchQuery: `${asp.ans} ${cleanTopic}`,
       youtubeSearchQuery: `${asp.ans} ${cleanTopic} OST soundtrack`,
       audioNotes: [261.63 + idx * 25, 329.63 + idx * 20, 392.0 + idx * 15, 523.25],
-      imageUrl: `https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Wikipedia-logo-v2.svg/1200px-Wikipedia-logo-v2.svg.png`,
+      imageUrl: gameMode === 'visual_blind_test' ? visualImgUrl : `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanTopic + ' theme')}?width=800&height=450&nologo=true`,
+      imagePrompt: `${asp.ans} ${cleanTopic}`,
       trivia: asp.trivia,
       category: asp.title
     };
@@ -892,13 +933,15 @@ export function generateDynamicFallbackQuiz(
 
   return {
     topic: cleanTopic,
-    themeTitle: `Blind Test : ${cleanTopic}`,
+    themeTitle: `${effectiveMode === 'music_blind_test' ? 'Blind Test Musical' : effectiveMode === 'visual_blind_test' ? 'Blind Test Visuel' : 'Quiz'} : ${cleanTopic}`,
     themeDescription: `15 énigmes sur mesure sur le thème "${cleanTopic}".`,
     primaryColor: '#9333ea',
     accentColor: '#f43f5e',
     ambientSound: 'synthwave',
     questions,
-    fallbackUsed: true
+    fallbackUsed: true,
+    gameMode: effectiveMode,
+    difficulty: effectiveDiff,
   };
 }
 
