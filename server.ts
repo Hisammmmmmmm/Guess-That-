@@ -9,8 +9,12 @@ import { createServer as createViteServer } from 'vite';
 import crypto from 'crypto';
 import { generateFallbackQuiz } from './src/data/fallbackGenerator';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe directory resolution supporting both ESM (tsx dev) and CommonJS (esbuild bundle)
+const safeDirname = typeof __dirname !== 'undefined'
+  ? __dirname
+  : (typeof import.meta !== 'undefined' && import.meta.url
+      ? path.dirname(fileURLToPath(import.meta.url))
+      : process.cwd());
 
 interface ServerPlayer {
   id: string;
@@ -121,7 +125,7 @@ function generateRoomCode(): string {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
@@ -2464,4 +2468,7 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('Fatal error starting server:', err);
+  process.exit(1);
+});
