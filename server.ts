@@ -96,6 +96,9 @@ function serializeRoom(room: ServerRoom) {
     gameStyle: room.gameStyle,
     language: room.language || 'fr',
     durationPerQuestion: room.durationPerQuestion,
+    remainingTime: room.status === 'playing'
+      ? Math.max(0.5, Math.round(room.durationPerQuestion - ((Date.now() - (room.questionStartTime || Date.now())) / 1000)))
+      : room.durationPerQuestion,
     currentQuestionIndex: room.currentQuestionIndex,
     questionStartTime: room.questionStartTime,
     quizData: room.quizData,

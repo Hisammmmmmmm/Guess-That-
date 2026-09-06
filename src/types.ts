@@ -100,6 +100,7 @@ export interface RoomState {
   gameStyle: GameStyle;
   language: string;
   durationPerQuestion: number;
+  remainingTime?: number;
   currentQuestionIndex: number;
   questionStartTime: number;
   quizData?: QuizData | null;

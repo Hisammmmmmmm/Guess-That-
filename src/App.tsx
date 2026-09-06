@@ -375,9 +375,8 @@ export default function App() {
             setScoreEarnedForCurrent(0);
 
             const duration = data.room.durationPerQuestion || settings.durationPerQuestion || 20;
-            const elapsed = data.room.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
-            const remaining = Math.max(0.5, duration - elapsed);
-            setTimeLeft(remaining);
+            // On fresh question arrival, always start at full duration
+            setTimeLeft(duration);
             lastTickSecondRef.current = -1;
             setScreen('playing');
             soundEngine.playQuestionTransition();
@@ -385,6 +384,14 @@ export default function App() {
           }
           return prev;
         });
+
+        // If player reconnected mid-question and needs server time sync
+        if (data.room.remainingTime !== undefined && !isAnswered) {
+          setTimeLeft((prev) => {
+            if (prev === 0) return Math.max(0.5, data.room.remainingTime);
+            return prev;
+          });
+        }
 
         // If player already answered in this room question
         if (currentPlayerId && data.room.players?.[currentPlayerId]?.answeredCurrent) {
@@ -430,9 +437,7 @@ export default function App() {
       setScoreEarnedForCurrent(0);
 
       const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
-      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
-      const remaining = Math.max(0.5, duration - elapsed);
-      setTimeLeft(remaining);
+      setTimeLeft(duration);
       lastTickSecondRef.current = -1;
       setScreen('playing');
 
@@ -485,9 +490,7 @@ export default function App() {
       setScoreEarnedForCurrent(0);
 
       const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
-      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
-      const remaining = Math.max(0.5, duration - elapsed);
-      setTimeLeft(remaining);
+      setTimeLeft(duration);
       lastTickSecondRef.current = -1;
       setScreen('playing');
       soundEngine.playQuestionTransition();
@@ -759,6 +762,7 @@ export default function App() {
     });
 
     setTimeLeft(settings.durationPerQuestion);
+    activeQuestionIndexRef.current = -1;
     lastTickSecondRef.current = -1;
 
     setScreen('playing');
@@ -1144,18 +1148,28 @@ export default function App() {
   }, [isAnswered, currentQuestion, currentQuestionIndex, settings.durationPerQuestion, stopTimer, settings.gameStyle, roomState, currentRoomCode, startAutoAdvanceTimer]);
 
   const [isPaused, setIsPaused] = useState(false);
+  const activeQuestionIndexRef = useRef<number>(-1);
 
   // Start Timer when on a fresh question
   useEffect(() => {
     if (screen !== 'playing' || isAnswered || !currentQuestion) {
       stopTimer();
+      if (screen !== 'playing') {
+        activeQuestionIndexRef.current = -1;
+      }
       return;
     }
 
-    // Only reset time left if we are on a new question and not just unpausing
-    if (timeLeft === 0 || timeLeft === settings.durationPerQuestion) {
-      setTimeLeft(settings.durationPerQuestion);
+    const targetDuration = roomState?.durationPerQuestion || settings.durationPerQuestion || 20;
+
+    // Whenever we transition to a new question, always start countdown from full duration
+    if (activeQuestionIndexRef.current !== currentQuestionIndex) {
+      activeQuestionIndexRef.current = currentQuestionIndex;
+      setTimeLeft(targetDuration);
+    } else if (timeLeft <= 0) {
+      setTimeLeft(targetDuration);
     }
+
     lastTickSecondRef.current = -1;
     setTimerActive(true);
 
@@ -1202,7 +1216,7 @@ export default function App() {
         clearInterval(timerRef.current);
       }
     };
-  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, activeGameMode, handleTimeUp, stopTimer, isPaused]);
+  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, roomState?.durationPerQuestion, activeGameMode, handleTimeUp, stopTimer, isPaused]);
 
   // Ref for the TTS audio so we can cancel it
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1527,6 +1541,7 @@ export default function App() {
   const handleExitToMenu = () => {
     clearAutoAdvanceTimer();
     stopTimer();
+    activeQuestionIndexRef.current = -1;
     soundEngine.stopAmbience();
     soundEngine.playClick();
     if (ttsAudioRef.current) {
@@ -2206,7 +2221,7 @@ export default function App() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <CircularCountdown
                         timeLeft={timeLeft}
-                        totalTime={settings.durationPerQuestion}
+                        totalTime={roomState?.durationPerQuestion || settings.durationPerQuestion || 20}
                         primaryColor={quizData.primaryColor}
                         size={24}
                       />
@@ -2276,7 +2291,7 @@ export default function App() {
                       <div className="bg-black/30 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-md flex flex-row items-center justify-around gap-2 flex-1 min-h-0">
                         <CircularCountdown
                           timeLeft={timeLeft}
-                          totalTime={settings.durationPerQuestion}
+                          totalTime={roomState?.durationPerQuestion || settings.durationPerQuestion || 20}
                           primaryColor={quizData.primaryColor}
                           size={50}
                         />
