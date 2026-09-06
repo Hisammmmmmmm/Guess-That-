@@ -340,6 +340,11 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Favicon redirect
+  app.get('/favicon.ico', (req, res) => {
+    res.redirect('/logo5.png');
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
