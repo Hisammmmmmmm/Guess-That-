@@ -351,7 +351,11 @@ async function startServer() {
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 5),
+      timestamp: new Date().toISOString()
+    });
   });
 
   // In-memory cache for YouTube searches to make audio instant
@@ -582,8 +586,8 @@ async function startServer() {
         const wdRes = await fetch(
           `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(searchTarget)}&language=fr&limit=2&format=json`,
           {
-            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
-            signal: AbortSignal.timeout(1800),
+            headers: { 'User-Agent': 'GuessThat-BlindTest/2.0 (https://guess-that.drocsid.site; contact@drocsid.site)' },
+            signal: AbortSignal.timeout(3000),
           }
         );
         if (!wdRes.ok) continue;
@@ -594,8 +598,8 @@ async function startServer() {
           if (!entityId) continue;
 
           const entityRes = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`, {
-            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
-            signal: AbortSignal.timeout(1800),
+            headers: { 'User-Agent': 'GuessThat-BlindTest/2.0 (https://guess-that.drocsid.site; contact@drocsid.site)' },
+            signal: AbortSignal.timeout(3000),
           });
           if (!entityRes.ok) continue;
           const entityJson = await entityRes.json();
@@ -638,10 +642,17 @@ async function startServer() {
         const url = `https://www.bing.com/images/async?q=${encodeURIComponent(q)}&first=0&count=20&scenario=ImageBasicHover&datsrc=N_I&layout=RowBased&mmasync=1`;
         const res = await fetch(url, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
           },
-          signal: AbortSignal.timeout(2400),
+          signal: AbortSignal.timeout(3500),
         });
         if (res.ok) {
           const html = await res.text();
@@ -814,8 +825,8 @@ async function startServer() {
           const summaryRes = await fetch(
             `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(searchTarget)}`,
             {
-              headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
-              signal: AbortSignal.timeout(1800),
+              headers: { 'User-Agent': 'GuessThat-BlindTest/2.0 (https://guess-that.drocsid.site; contact@drocsid.site)' },
+              signal: AbortSignal.timeout(3000),
             }
           );
           if (summaryRes.ok) {
@@ -856,8 +867,8 @@ async function startServer() {
         try {
           const url = `https://${lang}.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(target)}&gsrlimit=5&prop=pageimages&pithumbsize=1200&format=json`;
           const res = await fetch(url, {
-            headers: { 'User-Agent': 'GuessThatApp/2.0 (quiz@example.com)' },
-            signal: AbortSignal.timeout(2000),
+            headers: { 'User-Agent': 'GuessThat-BlindTest/2.0 (https://guess-that.drocsid.site; contact@drocsid.site)' },
+            signal: AbortSignal.timeout(3000),
           });
           if (res.ok) {
             const data = await res.json();
@@ -1085,18 +1096,18 @@ async function startServer() {
     const cleanTopic = (topic || '').trim();
     const cleanQ = (query || '').trim();
 
-    // 1. Exécution simultanée des collecteurs multi-images
+    // 1. Exécution ordonnée : moteurs Web HD prioritaires pour les vrais artworks/photos de qualité
     const results = await Promise.allSettled([
       fetchGlobalWebImages(cleanQ, cleanAns, category, cleanTopic, 15),
       fetchBingAlternateWallpaperImages(cleanQ, cleanAns, cleanTopic, 15),
-      fetchWikimediaCommonsImages(cleanQ, cleanAns, cleanTopic, 10),
-      fetchOpenverseImages(cleanQ, cleanAns, cleanTopic, 10),
-      fetchMediaWikiPageImages(cleanQ, cleanAns, cleanTopic, 6),
-      fetchWikidataImage(cleanQ, cleanAns, cleanTopic),
-      fetchWikipediaLeadImage(cleanQ, cleanAns, cleanTopic),
       fetchDDGImage(cleanQ, cleanAns, cleanTopic, 0),
       fetchDDGEnglishImage(cleanQ, cleanAns, category, cleanTopic),
+      fetchWikipediaLeadImage(cleanQ, cleanAns, cleanTopic),
+      fetchWikidataImage(cleanQ, cleanAns, cleanTopic),
+      fetchMediaWikiPageImages(cleanQ, cleanAns, cleanTopic, 4),
       fetchWikimediaDeepFileImage(cleanQ, cleanAns, cleanTopic),
+      fetchWikimediaCommonsImages(cleanQ, cleanAns, cleanTopic, 3),
+      fetchOpenverseImages(cleanQ, cleanAns, cleanTopic, 3),
     ]);
 
     const pool: string[] = [];
@@ -1110,7 +1121,8 @@ async function startServer() {
       }
     }
 
-    // Filtrage rigoureux des faux formats, logos et doublons
+    // Filtrage rigoureux des faux formats, logos, doublons et images parasites (peluches, cosplays amateurs, graffitis de rue)
+    const parasiticWords = ['plush', 'peluche', 'cosplay', 'cosplayer', 'mural_', 'cwt16', 'cwt', 'bushwick_brooklyn', 'figurine'];
     let distinct = Array.from(
       new Set(
         pool.filter(
@@ -1122,28 +1134,28 @@ async function startServer() {
               !x.endsWith('.svg') &&
               !x.toLowerCase().includes('wikipedia-logo') &&
               !x.toLowerCase().includes('logo-v2') &&
-              !x.toLowerCase().includes('site_logo')
+              !x.toLowerCase().includes('site_logo') &&
+              !parasiticWords.some((w) => x.toLowerCase().includes(w))
             )
         )
       )
     );
 
-    // 2. Si moins de 5 images trouvées, exécution de requêtes de secours élargies jusqu'à obtenir au moins 5 images
+    // 2. Si moins de 5 images trouvées, exécution de requêtes de secours élargies
     if (distinct.length < minCount) {
       const fallbackQueries = [
         cleanAns,
-        `${cleanAns} photo`,
+        `${cleanAns} official artwork`,
         `${cleanTopic} ${cleanAns}`,
-        `${cleanAns} scene`,
-        `${cleanAns} visual hd`,
-        `${cleanAns} artwork`,
+        `${cleanAns} character visual hd`,
+        `${cleanAns} photo hd`,
         `${cleanTopic} ${cleanAns} 4k`,
       ].filter((fq, i, arr): fq is string => Boolean(fq && fq.length > 1 && arr.indexOf(fq) === i));
 
       for (const fq of fallbackQueries) {
         if (distinct.length >= minCount) break;
         try {
-          const extra = await fetchGlobalWebImages(fq, fq, category, cleanTopic, 10);
+          const extra = await fetchGlobalWebImages(fq, fq, category, cleanTopic, 8);
           for (const u of extra) {
             if (!distinct.includes(u)) {
               distinct.push(u);
@@ -1154,19 +1166,23 @@ async function startServer() {
       }
     }
 
-    // 3. Failsafe absolu garanti : si toujours inférieur à 5, photos haute résolution sélectionnées
+    // 3. Failsafe 100% garanti et fidèle au sujet : JAMAIS d'image aléatoire sans rapport !
+    // Si moins de 5 images trouvées, générer des déclinaisons Pollinations AI directement basées sur le sujet
     if (distinct.length < minCount) {
-      const thematicFallbacks = [
-        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1000&q=80',
-        'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1000&q=80',
-        'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1000&q=80',
-        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80',
-        'https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=1000&q=80',
-      ];
-      for (const tf of thematicFallbacks) {
-        if (!distinct.includes(tf)) {
-          distinct.push(tf);
-          if (distinct.length >= minCount) break;
+      const subject = cleanAns || cleanTopic || cleanQ;
+      if (subject) {
+        const aiFallbacks = [
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(subject + ' ' + cleanTopic + ' character artwork ultra hd') }?width=800&height=600&nologo=true`,
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(subject + ' iconic scene cinematography lighting 4k') }?width=800&height=600&nologo=true`,
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(subject + ' ' + cleanTopic + ' official visual wallpaper') }?width=800&height=600&nologo=true`,
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(subject + ' close-up portrait detailed masterpiece') }?width=800&height=600&nologo=true`,
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(subject + ' action scene dynamic angle masterpiece') }?width=800&height=600&nologo=true`,
+        ];
+        for (const af of aiFallbacks) {
+          if (!distinct.includes(af)) {
+            distinct.push(af);
+            if (distinct.length >= minCount) break;
+          }
         }
       }
     }
@@ -1209,10 +1225,11 @@ async function startServer() {
 
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
           'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Referer': targetUrl,
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(6000),
       });
 
       if (!response.ok) {
@@ -1541,9 +1558,17 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
         } catch {}
       }
 
-      const processedQuestions = await Promise.all(
-        parsedData.questions.map(async (q: any, idx: number) => {
-          const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
+      // Traitement des questions par lots (batchSize = 3) pour éviter d'envoyer 150 requêtes HTTP simultanées
+      // depuis l'IP du VPS vers les moteurs de recherche (ce qui provoquait un bannissement IP / 429 de Bing & DuckDuckGo)
+      const batchSize = 3;
+      const processedQuestions: any[] = [];
+
+      for (let i = 0; i < parsedData.questions.length; i += batchSize) {
+        const currentBatch = parsedData.questions.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          currentBatch.map(async (q: any, bIdx: number) => {
+            const idx = i + bIdx;
+            const primaryQuery = q.wikiSearchQuery || `${q.correctAnswer} ${topic}`;
           
           let finalImg1 = q.imageUrl || '';
           let finalImg2 = q.secondaryImageUrl || '';
@@ -1649,8 +1674,10 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
           };
         })
       );
-      parsedData.questions = processedQuestions;
+      processedQuestions.push(...batchResults);
     }
+    parsedData.questions = processedQuestions;
+  }
 
     parsedData.topic = topic;
     const resolvedMode = (parsedData.gameMode || gameMode || 'quiz') as string;
@@ -2464,7 +2491,9 @@ Langue : Français. Niveau : ${difficultyInstructions}`;
   }
 
   server.listen(PORT, '0.0.0.0', () => {
+    const hasKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 5);
     console.log(`Blind Test Server with WebSockets running on http://0.0.0.0:${PORT}`);
+    console.log(`Gemini API Key status: ${hasKey ? 'CONFIGURED (AI Generation Active)' : 'MISSING (Using Fallback Generator - Set GEMINI_API_KEY in .env)'}`);
   });
 }
 
