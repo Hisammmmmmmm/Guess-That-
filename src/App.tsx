@@ -53,8 +53,6 @@ import { MultiplayerScoreboard } from './components/MultiplayerScoreboard';
 import { MultiplayerResultsView } from './components/MultiplayerResultsView';
 import { QuizLibraryModal } from './components/QuizLibraryModal';
 import { StatsDetailModal } from './components/StatsDetailModal';
-import { XboxBadge } from './components/XboxBadge';
-import { useGamepad } from './hooks/useGamepad';
 import { quizLibraryService } from './services/quizLibraryService';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -89,9 +87,6 @@ function prepareQuizData(data: QuizData): QuizData {
 }
 
 export default function App() {
-  // Global Xbox / Gamepad Controller Support
-  useGamepad();
-
   const [screen, setScreen] = useState<GameScreen>('menu');
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [pendingQuizData, setPendingQuizData] = useState<QuizData | null>(null);
@@ -127,30 +122,11 @@ export default function App() {
     speechCluesEnabled: false,
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'settings' | 'tutorial'>('settings');
-
-  const handleOpenSettings = useCallback(() => {
-    setSettingsInitialTab('settings');
-    setIsSettingsOpen(true);
-  }, []);
-
-  const handleOpenTutorial = useCallback(() => {
-    setSettingsInitialTab('tutorial');
-    setIsSettingsOpen(true);
-  }, []);
 
   // Generation & Loading State
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('Préparation du Blind Test...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Cancel / Exit generation handler
-  const handleCancelGeneration = useCallback(() => {
-    setIsGenerating(false);
-    soundEngine.playClick();
-    setErrorMessage(null);
-    setScreen('menu');
-  }, []);
   
   // Retro Quiz Show menu music
   const RETRO_QUIZ_MENU_VIDEO_ID = 'n61OIl_gkVE'; // Retro Quiz Game Show 80s Soundtrack
@@ -375,8 +351,9 @@ export default function App() {
             setScoreEarnedForCurrent(0);
 
             const duration = data.room.durationPerQuestion || settings.durationPerQuestion || 20;
-            // On fresh question arrival, always start at full duration
-            setTimeLeft(duration);
+            const elapsed = data.room.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+            const remaining = Math.max(0.5, duration - elapsed);
+            setTimeLeft(remaining);
             lastTickSecondRef.current = -1;
             setScreen('playing');
             soundEngine.playQuestionTransition();
@@ -384,14 +361,6 @@ export default function App() {
           }
           return prev;
         });
-
-        // If player reconnected mid-question and needs server time sync
-        if (data.room.remainingTime !== undefined && !isAnswered) {
-          setTimeLeft((prev) => {
-            if (prev === 0) return Math.max(0.5, data.room.remainingTime);
-            return prev;
-          });
-        }
 
         // If player already answered in this room question
         if (currentPlayerId && data.room.players?.[currentPlayerId]?.answeredCurrent) {
@@ -437,7 +406,9 @@ export default function App() {
       setScoreEarnedForCurrent(0);
 
       const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
-      setTimeLeft(duration);
+      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+      const remaining = Math.max(0.5, duration - elapsed);
+      setTimeLeft(remaining);
       lastTickSecondRef.current = -1;
       setScreen('playing');
 
@@ -490,7 +461,9 @@ export default function App() {
       setScoreEarnedForCurrent(0);
 
       const duration = data.room?.durationPerQuestion || settings.durationPerQuestion || 20;
-      setTimeLeft(duration);
+      const elapsed = data.room?.questionStartTime ? Math.max(0, (Date.now() - data.room.questionStartTime) / 1000) : 0;
+      const remaining = Math.max(0.5, duration - elapsed);
+      setTimeLeft(remaining);
       lastTickSecondRef.current = -1;
       setScreen('playing');
       soundEngine.playQuestionTransition();
@@ -762,7 +735,6 @@ export default function App() {
     });
 
     setTimeLeft(settings.durationPerQuestion);
-    activeQuestionIndexRef.current = -1;
     lastTickSecondRef.current = -1;
 
     setScreen('playing');
@@ -1148,28 +1120,18 @@ export default function App() {
   }, [isAnswered, currentQuestion, currentQuestionIndex, settings.durationPerQuestion, stopTimer, settings.gameStyle, roomState, currentRoomCode, startAutoAdvanceTimer]);
 
   const [isPaused, setIsPaused] = useState(false);
-  const activeQuestionIndexRef = useRef<number>(-1);
 
   // Start Timer when on a fresh question
   useEffect(() => {
     if (screen !== 'playing' || isAnswered || !currentQuestion) {
       stopTimer();
-      if (screen !== 'playing') {
-        activeQuestionIndexRef.current = -1;
-      }
       return;
     }
 
-    const targetDuration = roomState?.durationPerQuestion || settings.durationPerQuestion || 20;
-
-    // Whenever we transition to a new question, always start countdown from full duration
-    if (activeQuestionIndexRef.current !== currentQuestionIndex) {
-      activeQuestionIndexRef.current = currentQuestionIndex;
-      setTimeLeft(targetDuration);
-    } else if (timeLeft <= 0) {
-      setTimeLeft(targetDuration);
+    // Only reset time left if we are on a new question and not just unpausing
+    if (timeLeft === 0 || timeLeft === settings.durationPerQuestion) {
+      setTimeLeft(settings.durationPerQuestion);
     }
-
     lastTickSecondRef.current = -1;
     setTimerActive(true);
 
@@ -1216,7 +1178,7 @@ export default function App() {
         clearInterval(timerRef.current);
       }
     };
-  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, roomState?.durationPerQuestion, activeGameMode, handleTimeUp, stopTimer, isPaused]);
+  }, [screen, currentQuestionIndex, isAnswered, currentQuestion, settings.durationPerQuestion, activeGameMode, handleTimeUp, stopTimer, isPaused]);
 
   // Ref for the TTS audio so we can cancel it
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1541,7 +1503,6 @@ export default function App() {
   const handleExitToMenu = () => {
     clearAutoAdvanceTimer();
     stopTimer();
-    activeQuestionIndexRef.current = -1;
     soundEngine.stopAmbience();
     soundEngine.playClick();
     if (ttsAudioRef.current) {
@@ -1603,199 +1564,6 @@ export default function App() {
     });
   };
 
-  // Global Keyboard Navigation & Shortcuts
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in a form field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      // Prevent page scrolling on Arrow keys and Page keys globally
-      if (
-        e.key === 'ArrowUp' ||
-        e.key === 'ArrowDown' ||
-        e.key === 'ArrowLeft' ||
-        e.key === 'ArrowRight' ||
-        e.key === 'PageUp' ||
-        e.key === 'PageDown'
-      ) {
-        e.preventDefault();
-      }
-
-      const key = e.key.toLowerCase();
-
-      // Escape or Backspace to cancel generation, close any open modal, or exit to menu
-      if (e.key === 'Escape' || e.key === 'Backspace') {
-        e.preventDefault();
-
-        // 1. Cancel generation if in progress
-        if (isGenerating || screen === 'generating') {
-          handleCancelGeneration();
-          return;
-        }
-
-        // 2. Close active modals in priority order
-        if (isSettingsOpen) {
-          setIsSettingsOpen(false);
-          return;
-        }
-        if (isLibraryOpen) {
-          setIsLibraryOpen(false);
-          return;
-        }
-        if (isJoinModalOpen) {
-          setIsJoinModalOpen(false);
-          return;
-        }
-        if (isPublicRoomsModalOpen) {
-          setIsPublicRoomsModalOpen(false);
-          return;
-        }
-        if (isStatsModalOpen) {
-          setIsStatsModalOpen(false);
-          return;
-        }
-
-        // 3. Return to menu from game screens
-        if (
-          screen === 'playing' ||
-          screen === 'ready' ||
-          screen === 'results' ||
-          screen === 'room_results' ||
-          screen === 'room_lobby'
-        ) {
-          handleExitToMenu();
-          return;
-        }
-        return;
-      }
-
-      // If a modal is open, let that modal manage its own keys (unless Mute toggle)
-      const isAnyModalOpen = isSettingsOpen || isLibraryOpen || isJoinModalOpen || isPublicRoomsModalOpen || isStatsModalOpen;
-
-      // 'm': Toggle Sound Mute
-      if (key === 'm') {
-        e.preventDefault();
-        const isMuted = !settings.soundEffectsEnabled && !settings.musicEnabled;
-        const nextState = isMuted;
-        soundEngine.setSfxMuted(!nextState);
-        soundEngine.setMusicMuted(!nextState);
-        soundEngine.playClick();
-        updateSettings({
-          soundEffectsEnabled: nextState,
-          musicEnabled: nextState,
-        });
-        return;
-      }
-
-      // 'o' or 'p': Options Menu
-      if (key === 'o' || key === 'p') {
-        e.preventDefault();
-        soundEngine.playClick();
-        if (isSettingsOpen && settingsInitialTab === 'settings') {
-          setIsSettingsOpen(false);
-        } else {
-          handleOpenSettings();
-        }
-        return;
-      }
-
-      // 't' or 'h': Tutorial & Guide
-      if (key === 't' || key === 'h') {
-        e.preventDefault();
-        soundEngine.playClick();
-        if (isSettingsOpen && settingsInitialTab === 'tutorial') {
-          setIsSettingsOpen(false);
-        } else {
-          handleOpenTutorial();
-        }
-        return;
-      }
-
-      if (isAnyModalOpen) return;
-
-      // 'l': Quiz Library
-      if (key === 'l' && screen === 'menu') {
-        e.preventDefault();
-        soundEngine.playClick();
-        setIsLibraryOpen((prev) => !prev);
-        return;
-      }
-
-      // 'j': Join Room Modal
-      if (key === 'j' && screen === 'menu') {
-        e.preventDefault();
-        soundEngine.playClick();
-        setJoinModalInitialCode('');
-        setIsJoinModalCodeLocked(false);
-        setIsJoinModalOpen(true);
-        return;
-      }
-
-      // 's': Live Stats Modal
-      if (key === 's' && screen === 'menu') {
-        e.preventDefault();
-        soundEngine.playClick();
-        setStatsModalInitialTab('players');
-        setIsStatsModalOpen(true);
-        return;
-      }
-
-      // 'Enter': Launch or Replay on Ready, Lobby, and Results screens
-      if (e.key === 'Enter') {
-        if (screen === 'ready' && pendingQuizData) {
-          e.preventDefault();
-          soundEngine.playClick();
-          if (settings.gameStyle === 'competitive_room') {
-            handleCreateRoom(pendingQuizData);
-          } else {
-            startQuiz(pendingQuizData);
-          }
-          return;
-        }
-        if (screen === 'room_lobby' && roomState && (currentRoomCode || currentRoomCodeRef.current)) {
-          const isHost = roomState.hostId === currentPlayerId;
-          const questionsCount = roomState.quizData?.questions?.length || 0;
-          if (isHost && !isGenerating && questionsCount > 0) {
-            e.preventDefault();
-            soundEngine.playStartGame();
-            const code = currentRoomCode || currentRoomCodeRef.current || '';
-            multiplayerService.startGame(code);
-            return;
-          }
-        }
-        if (screen === 'results' || screen === 'room_results') {
-          e.preventDefault();
-          soundEngine.playClick();
-          handleReplay();
-          return;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [
-    isSettingsOpen,
-    isLibraryOpen,
-    isJoinModalOpen,
-    isPublicRoomsModalOpen,
-    isStatsModalOpen,
-    settingsInitialTab,
-    screen,
-    settings.soundEffectsEnabled,
-    settings.musicEnabled,
-    settings.gameStyle,
-    pendingQuizData,
-    updateSettings,
-    handleOpenSettings,
-    handleOpenTutorial,
-    handleExitToMenu,
-    handleReplay,
-    handleCreateRoom,
-  ]);
-
   return (
     <div
       className={`w-full text-slate-100 font-sans selection:bg-purple-500 selection:text-white flex flex-col justify-between ${
@@ -1812,7 +1580,7 @@ export default function App() {
         settings={settings}
         roomState={roomState}
         onUpdateSettings={updateSettings}
-        onOpenSettings={handleOpenSettings}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenLibrary={() => setIsLibraryOpen(true)}
         libraryCount={libraryCount}
         onExitToMenu={handleExitToMenu}
@@ -2049,9 +1817,8 @@ export default function App() {
                   }}
                   className="w-full py-3 sm:py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold tracking-wider shadow-lg transform hover:-translate-y-0.5 transition-all active:scale-95 border border-purple-400/50 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <XboxBadge button="A" />
                   <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" />
-                  <span>{t('create_room', settings.language)}</span>
+                  {t('create_room', settings.language)}
                 </button>
               ) : (
                 <button
@@ -2059,23 +1826,11 @@ export default function App() {
                   onClick={() => {
                     startQuiz(pendingQuizData);
                   }}
-                  className="w-full py-2.5 sm:py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold tracking-wider shadow-lg transform hover:-translate-y-1 transition-all active:scale-95 border border-purple-400/50 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 sm:py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold tracking-wider shadow-lg transform hover:-translate-y-1 transition-all active:scale-95 border border-purple-400/50 cursor-pointer"
                 >
-                  <XboxBadge button="A" />
-                  <span>{t('start_game', settings.language)}</span>
+                  {t('start_game', settings.language)}
                 </button>
               )}
-
-              <button
-                type="button"
-                id="ready-exit-btn"
-                onClick={handleExitToMenu}
-                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 border border-white/10 transition-all cursor-pointer active:scale-95"
-              >
-                <kbd className="px-1.5 py-0.5 rounded bg-black/50 border border-white/20 text-white text-[10px] font-mono">Échap</kbd>
-                <XboxBadge button="B" />
-                <span>{t('exit_to_menu', settings.language) || 'Retour au menu'}</span>
-              </button>
             </motion.div>
           )}
 
@@ -2097,10 +1852,6 @@ export default function App() {
                 generationStepText={generationStep}
                 errorMessage={errorMessage}
                 onStartGame={() => currentRoomCode && multiplayerService.startGame(currentRoomCode)}
-                onRefreshRoom={() => {
-                  const code = currentRoomCode || currentRoomCodeRef.current;
-                  if (code) multiplayerService.refreshRoom(code);
-                }}
                 onSendReaction={(emoji) => currentRoomCode && multiplayerService.sendReaction(currentRoomCode, emoji)}
                 onLeaveRoom={handleExitToMenu}
                 onRetryGeneration={() => generateQuizFromTopic(roomState.topic, undefined, roomState.difficulty, roomState.gameMode as any, 'competitive_room')}
@@ -2162,18 +1913,6 @@ export default function App() {
                   <div className="bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500 h-full rounded-full animate-pulse w-3/4 shadow-[0_0_15px_rgba(168,85,247,0.8)]" />
                 </div>
               </div>
-
-              {/* Cancel Button with Keyboard & Gamepad Badge */}
-              <button
-                type="button"
-                id="cancel-loading-btn"
-                onClick={handleCancelGeneration}
-                className="mt-1 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white/90 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95"
-              >
-                <kbd className="px-1.5 py-0.5 rounded bg-black/50 border border-white/20 text-white text-[10px] font-mono">Échap</kbd>
-                <XboxBadge button="B" />
-                <span>{t('close', settings.language)} / Annuler</span>
-              </button>
             </motion.div>
           )}
 
@@ -2221,7 +1960,7 @@ export default function App() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <CircularCountdown
                         timeLeft={timeLeft}
-                        totalTime={roomState?.durationPerQuestion || settings.durationPerQuestion || 20}
+                        totalTime={settings.durationPerQuestion}
                         primaryColor={quizData.primaryColor}
                         size={24}
                       />
@@ -2230,25 +1969,10 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* Droite: Bouton rafraîchir à gauche de la position dans le classement, et score */}
+                    {/* Droite: Position, Rang et Score sur la même ligne */}
                     {roomState ? (
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {/* Bouton de rafraîchissement à gauche du cadre de position */}
-                        <button
-                          type="button"
-                          id="btn-mobile-game-refresh"
-                          onClick={() => {
-                            soundEngine.playClick();
-                            const code = currentRoomCode || currentRoomCodeRef.current;
-                            if (code) multiplayerService.refreshRoom(code);
-                          }}
-                          className="p-1 rounded-lg bg-white/10 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-white/15 transition-all cursor-pointer flex items-center justify-center shrink-0"
-                          title={t('refresh_room', roomState?.language || settings.language)}
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                        </button>
-
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/25 border border-purple-400/40 text-[11px] font-extrabold text-purple-200 shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/25 border border-purple-400/40 text-[11px] font-extrabold text-purple-200">
                           <span>{myRoomRank === 1 ? '🥇' : myRoomRank === 2 ? '🥈' : myRoomRank === 3 ? '🥉' : '🏅'}</span>
                           <span>
                             {myRoomRank}
@@ -2291,7 +2015,7 @@ export default function App() {
                       <div className="bg-black/30 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-md flex flex-row items-center justify-around gap-2 flex-1 min-h-0">
                         <CircularCountdown
                           timeLeft={timeLeft}
-                          totalTime={roomState?.durationPerQuestion || settings.durationPerQuestion || 20}
+                          totalTime={settings.durationPerQuestion}
                           primaryColor={quizData.primaryColor}
                           size={50}
                         />
@@ -2435,10 +2159,10 @@ export default function App() {
 
                 {/* 2. BAS DU CONTENEUR: Question & Choix de réponses */}
                 <div className="w-full flex flex-col gap-1 sm:gap-2 shrink-0 mt-0.5">
-                  {/* Titre de la question : affichage sur jusqu'à trois lignes si nécessaire, sans défilement */}
-                  <div className="px-1 text-center shrink-0 w-full flex items-center justify-center min-h-[36px] xs:min-h-[44px] sm:min-h-[50px]">
+                  {/* Titre de la question : affichage sur deux lignes si trop longue, sans défilement */}
+                  <div className="px-1 text-center shrink-0 w-full flex items-center justify-center min-h-[36px] sm:min-h-[44px]">
                     <h2
-                      className="text-xs sm:text-sm md:text-base lg:text-lg font-black text-white leading-snug font-heading drop-shadow-md line-clamp-3 px-2 max-w-4xl mx-auto break-words"
+                      className="text-xs sm:text-sm md:text-base lg:text-lg font-black text-white leading-snug font-heading drop-shadow-md line-clamp-2 px-2 max-w-4xl mx-auto break-words"
                       style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
                     >
                       {currentQuestion.question}
@@ -2583,7 +2307,6 @@ export default function App() {
         playerName={profileName}
         playerAvatar={profileAvatar}
         onUpdatePlayerProfile={handleUpdateProfile}
-        initialTab={settingsInitialTab}
       />
 
       {/* Quiz Library Modal (Saved & Favorites, Import/Export, Replay) */}
@@ -2607,15 +2330,11 @@ export default function App() {
           setIsJoinModalCodeLocked(true);
           setIsJoinModalOpen(true);
         }}
-        onPlayQuizSolo={(quizData, mode, diff) => {
-          const finalMode = (mode || quizData?.gameMode || 'quiz') as GameMode;
-          const finalDiff = (diff || quizData?.difficulty || 'medium') as GameDifficulty;
-          handlePlayFromLibrarySolo(quizData, finalMode, finalDiff);
+        onPlayQuizSolo={(quizData) => {
+          handlePlayFromLibrarySolo(quizData, quizData.gameMode, quizData.difficulty);
         }}
-        onPlayQuizMulti={(quizData, mode, diff) => {
-          const finalMode = (mode || quizData?.gameMode || 'quiz') as GameMode;
-          const finalDiff = (diff || quizData?.difficulty || 'medium') as GameDifficulty;
-          handlePlayFromLibraryMulti(quizData, finalMode, finalDiff);
+        onPlayQuizMulti={(quizData) => {
+          handlePlayFromLibraryMulti(quizData, quizData.gameMode, quizData.difficulty);
         }}
       />
 

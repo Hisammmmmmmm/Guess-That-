@@ -10,8 +10,7 @@ import {
   Hash,
   Pause,
   Play,
-  BookOpen,
-  Keyboard,
+  BookOpen
 } from 'lucide-react';
 import { GameSettings, QuizData, GameScreen, RoomState } from '../types';
 import { soundEngine } from '../services/soundEngine';
@@ -150,12 +149,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={toggleSound}
             id="btn-quick-sound-toggle"
-            className={`p-2 sm:p-2.5 px-2.5 sm:px-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 text-xs font-bold backdrop-blur-md shadow-md ${
+            className={`p-2.5 px-3 rounded-2xl border transition-all cursor-pointer flex items-center gap-2 text-xs font-bold backdrop-blur-md shadow-md ${
               settings.soundEffectsEnabled || settings.musicEnabled
                 ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 hover:bg-purple-500/30'
                 : 'bg-white/5 border-white/10 text-white/40 hover:text-white/70'
             }`}
-            title="Mute / Activer son (Touche M)"
+            title={t('toggle_sound')}
           >
             {settings.soundEffectsEnabled || settings.musicEnabled ? (
               <>
@@ -168,7 +167,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden lg:inline text-[11px]">{t('muted')}</span>
               </>
             )}
-            <span className="text-[9px] font-mono opacity-50 hidden sm:inline">[M]</span>
           </button>
 
           {/* Library Button */}
@@ -180,19 +178,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onOpenLibrary();
               }}
               id="btn-open-library"
-              className={`p-2 sm:p-2.5 ${
-                currentScreen === 'playing' ? 'hidden sm:flex px-2 sm:px-3.5' : 'flex px-2.5 sm:px-3.5'
-              } rounded-xl sm:rounded-2xl bg-purple-600/20 hover:bg-purple-600/35 border border-purple-400/40 text-purple-200 hover:text-white transition-all cursor-pointer items-center justify-center gap-1.5 sm:gap-2 backdrop-blur-md shadow-md hover:border-purple-400 shrink-0`}
-              title="Bibliothèque de Quiz & Favoris (Touche L)"
+              className="p-2.5 px-3 sm:px-3.5 rounded-2xl bg-purple-600/20 hover:bg-purple-600/35 border border-purple-400/40 text-purple-200 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 backdrop-blur-md shadow-md hover:border-purple-400"
+              title="Bibliothèque de Quiz & Favoris"
             >
-              <BookOpen className="w-4 h-4 text-purple-400 shrink-0" />
-              <span className={`text-xs font-bold ${currentScreen === 'playing' ? 'hidden md:inline' : 'hidden sm:inline'}`}>Bibliothèque</span>
+              <BookOpen className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-bold hidden sm:inline">Bibliothèque</span>
               {libraryCount > 0 && (
                 <span className="px-1.5 py-0.2 rounded-full bg-purple-500 text-white text-[10px] font-black shrink-0">
                   {libraryCount}
                 </span>
               )}
-              <span className="text-[9px] font-mono opacity-50 hidden md:inline">[L]</span>
             </button>
           )}
 
@@ -204,12 +199,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               onOpenSettings();
             }}
             id="btn-open-settings"
-            className={`p-2 sm:p-2.5 ${currentScreen === 'playing' ? 'px-2 sm:px-3.5' : 'px-2.5 sm:px-3.5'} rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-white/90 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 backdrop-blur-md shadow-md shrink-0`}
-            title="Options & Audio (Touche O)"
+            className="p-2.5 px-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-white/90 hover:text-white transition-all cursor-pointer flex items-center gap-2 backdrop-blur-md shadow-md"
+            title={t('game_settings')}
           >
-            <Sliders className="w-4 h-4 text-purple-400 shrink-0" />
-            <span className={`text-xs font-bold ${currentScreen === 'playing' ? 'hidden md:inline' : 'hidden sm:inline'}`}>{t('options')}</span>
-            <span className="text-[9px] font-mono opacity-50 hidden sm:inline">[O]</span>
+            <Sliders className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-bold hidden sm:inline">{t('options')}</span>
           </button>
         </div>
       </div>
